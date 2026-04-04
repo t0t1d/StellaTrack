@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CoreLocation
 
 @MainActor
 class DeviceManager: ObservableObject {
@@ -12,9 +13,12 @@ class DeviceManager: ObservableObject {
     }
 
     @discardableResult
-    func addMockDevice(name: String, settings: AlertSettings = .default) -> TrackedDevice {
+    func addMockDevice(name: String, settings: AlertSettings = .default, initialCoordinate: CLLocationCoordinate2D? = nil) -> TrackedDevice {
         let provider = MockDistanceProvider()
         let device = addDevice(name: name, provider: provider, settings: settings)
+        if let coord = initialCoordinate {
+            device.mockCoordinate = coord
+        }
         provider.start()
         return device
     }

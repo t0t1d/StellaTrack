@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 struct AddDeviceSheet: View {
     @ObservedObject var deviceManager: DeviceManager
@@ -6,6 +7,7 @@ struct AddDeviceSheet: View {
 
     @StateObject private var scanner = StellaScanner()
     @StateObject private var pairingManager = StellaPairingManager()
+    @StateObject private var locationManager = LocationManager()
 
     @State private var pairingTarget: DiscoveredStella?
 
@@ -31,13 +33,24 @@ struct AddDeviceSheet: View {
             }
             .onAppear {
                 scanner.startScan()
+                locationManager.requestPermission()
+                locationManager.startUpdating()
             }
             .onDisappear {
                 scanner.stopScan()
             }
             .onChange(of: pairingManager.pairingState) { _, newState in
                 guard newState == .paired, let stella = pairingTarget else { return }
-                deviceManager.addMockDevice(name: stella.name)
+                let coord: CLLocationCoordinate2D?
+                if let userLoc = locationManager.userLocation {
+                    coord = CLLocationCoordinate2D(
+                        latitude: userLoc.latitude + 0.0002,
+                        longitude: userLoc.longitude
+                    )
+                } else {
+                    coord = nil
+                }
+                deviceManager.addMockDevice(name: stella.name, initialCoordinate: coord)
                 pairingManager.reset()
                 pairingTarget = nil
                 isPresented = false
@@ -183,7 +196,19 @@ struct AddDeviceSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Button("Add Mock Device") {
-                deviceManager.addMockDevice(name: "Mock Device")
+                let coord: CLLocationCoordinate2D?
+                if let userLoc = locationManager.userLocation {
+                    coord = CLLocationCoordinate2D(
+                        latitude: userLoc.latitude + 0.0002,
+                        longitude: userLoc.longitude
+                    )
+                } else {
+                    coord = nil
+                }
+                deviceManager.addMockDevice(
+                    name: "Child \(deviceManager.devices.count + 1)",
+                    initialCoordinate: coord
+                )
                 isPresented = false
             }
             .buttonStyle(.borderedProminent)
