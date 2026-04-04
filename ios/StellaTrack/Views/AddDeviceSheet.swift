@@ -50,7 +50,7 @@ struct AddDeviceSheet: View {
                 } else {
                     coord = nil
                 }
-                deviceManager.addMockDevice(name: stella.name, initialCoordinate: coord)
+                deviceManager.addMockDevice(name: stella.name, initialCoordinate: coord, userLocation: locationManager.userLocation)
                 pairingManager.reset()
                 pairingTarget = nil
                 isPresented = false
@@ -207,7 +207,8 @@ struct AddDeviceSheet: View {
                 }
                 deviceManager.addMockDevice(
                     name: "Child \(deviceManager.devices.count + 1)",
-                    initialCoordinate: coord
+                    initialCoordinate: coord,
+                    userLocation: locationManager.userLocation
                 )
                 isPresented = false
             }
