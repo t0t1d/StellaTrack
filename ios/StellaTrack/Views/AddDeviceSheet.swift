@@ -3,11 +3,11 @@ import CoreLocation
 
 struct AddDeviceSheet: View {
     @ObservedObject var deviceManager: DeviceManager
+    @ObservedObject var locationManager: LocationManager
     @Binding var isPresented: Bool
 
     @StateObject private var scanner = StellaScanner()
     @StateObject private var pairingManager = StellaPairingManager()
-    @StateObject private var locationManager = LocationManager()
 
     @State private var pairingTarget: DiscoveredStella?
 
@@ -16,41 +16,32 @@ struct AddDeviceSheet: View {
             VStack(spacing: 0) {
                 scanSection
 
+                #if DEBUG
                 Divider()
                     .padding(.vertical, 8)
 
                 mockDeviceSection
+                #endif
             }
             .padding(.horizontal)
             .navigationTitle("Add Device")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Close", systemImage: "xmark") {
                         isPresented = false
                     }
                 }
             }
             .onAppear {
                 scanner.startScan()
-                locationManager.requestPermission()
-                locationManager.startUpdating()
             }
             .onDisappear {
                 scanner.stopScan()
             }
             .onChange(of: pairingManager.pairingState) { _, newState in
                 guard newState == .paired, let stella = pairingTarget else { return }
-                let coord: CLLocationCoordinate2D?
-                if let userLoc = locationManager.userLocation {
-                    coord = CLLocationCoordinate2D(
-                        latitude: userLoc.latitude + 0.0002,
-                        longitude: userLoc.longitude
-                    )
-                } else {
-                    coord = nil
-                }
-                deviceManager.addMockDevice(name: stella.name, initialCoordinate: coord, userLocation: locationManager.userLocation)
+                deviceManager.addStellaDevice(name: stella.name)
                 pairingManager.reset()
                 pairingTarget = nil
                 isPresented = false
@@ -61,7 +52,7 @@ struct AddDeviceSheet: View {
     private var scanSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Nearby Stella")
+                Text("Nearby Device")
                     .font(.headline)
                 Spacer()
                 scanningIndicator
@@ -147,7 +138,6 @@ struct AddDeviceSheet: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .disabled(pairingTarget != nil)
     }
 
@@ -180,7 +170,6 @@ struct AddDeviceSheet: View {
                     pairingManager.reset()
                     pairingManager.pair(stella: stella)
                 }
-                .buttonStyle(.bordered)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -212,8 +201,17 @@ struct AddDeviceSheet: View {
                 )
                 isPresented = false
             }
-            .buttonStyle(.borderedProminent)
             .frame(maxWidth: .infinity)
+
+            Divider()
+
+            NavigationLink {
+                UWBDiagnosticsView()
+                    .navigationTitle("UWB Diagnostics")
+                    .navigationBarTitleDisplayMode(.inline)
+            } label: {
+                Label("UWB Diagnostics", systemImage: "antenna.radiowaves.left.and.right")
+            }
         }
         .padding(.bottom, 8)
     }

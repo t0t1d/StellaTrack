@@ -6,11 +6,27 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		AA000001AAAA0001AAAAAAAA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C60D8B792F804127006E6220 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C60D8B802F804127006E6220;
+			remoteInfo = StellaTrack;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		AA000002AAAA0002AAAAAAAA /* StellaTrackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StellaTrackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C60D8B812F804127006E6220 /* StellaTrack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StellaTrack.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		AA000003AAAA0003AAAAAAAA /* StellaTrackTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = StellaTrackTests;
+			sourceTree = "<group>";
+		};
 		C60D8B832F804127006E6220 /* StellaTrack */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = StellaTrack;
@@ -19,6 +35,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AA000004AAAA0004AAAAAAAA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C60D8B7E2F804127006E6220 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				C60D8B832F804127006E6220 /* StellaTrack */,
+				AA000003AAAA0003AAAAAAAA /* StellaTrackTests */,
 				C60D8B822F804127006E6220 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				C60D8B812F804127006E6220 /* StellaTrack.app */,
+				AA000002AAAA0002AAAAAAAA /* StellaTrackTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,6 +73,27 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		AA000005AAAA0005AAAAAAAA /* StellaTrackTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA000009AAAA0009AAAAAAAA /* Build configuration list for PBXNativeTarget "StellaTrackTests" */;
+			buildPhases = (
+				AA000006AAAA0006AAAAAAAA /* Sources */,
+				AA000004AAAA0004AAAAAAAA /* Frameworks */,
+				AA000007AAAA0007AAAAAAAA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA000008AAAA0008AAAAAAAA /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AA000003AAAA0003AAAAAAAA /* StellaTrackTests */,
+			);
+			name = StellaTrackTests;
+			productName = StellaTrackTests;
+			productReference = AA000002AAAA0002AAAAAAAA /* StellaTrackTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		C60D8B802F804127006E6220 /* StellaTrack */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C60D8B8C2F804128006E6220 /* Build configuration list for PBXNativeTarget "StellaTrack" */;
@@ -80,6 +126,10 @@
 				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					AA000005AAAA0005AAAAAAAA = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = C60D8B802F804127006E6220;
+					};
 					C60D8B802F804127006E6220 = {
 						CreatedOnToolsVersion = 26.4;
 					};
@@ -100,11 +150,19 @@
 			projectRoot = "";
 			targets = (
 				C60D8B802F804127006E6220 /* StellaTrack */,
+				AA000005AAAA0005AAAAAAAA /* StellaTrackTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		AA000007AAAA0007AAAAAAAA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C60D8B7F2F804127006E6220 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -115,6 +173,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AA000006AAAA0006AAAAAAAA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C60D8B7D2F804127006E6220 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -124,7 +189,55 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		AA000008AAAA0008AAAAAAAA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C60D8B802F804127006E6220 /* StellaTrack */;
+			targetProxy = AA000001AAAA0001AAAAAAAA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		AA00000AAAAA000AAAAAAAAA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = edu.gatech.StellaTrackTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StellaTrack.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StellaTrack";
+			};
+			name = Debug;
+		};
+		AA00000BAAAA000BAAAAAAAA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = edu.gatech.StellaTrackTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StellaTrack.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StellaTrack";
+			};
+			name = Release;
+		};
 		C60D8B8A2F804128006E6220 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -249,12 +362,19 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BWHNURY2RS;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app uses Bluetooth to connect to the wearable device.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "This app uses your location in the background to keep tracking your child's distance.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app uses your location to show your child's estimated position on a map.";
+				INFOPLIST_KEY_NSNearbyInteractionUsageDescription = "This app uses UWB to measure distance to your child's wearable device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "bluetooth-central location";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -263,8 +383,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = edu.gatech.StellaTrack;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thetolab.StellaTrack;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -280,12 +401,19 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BWHNURY2RS;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app uses Bluetooth to connect to the wearable device.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "This app uses your location in the background to keep tracking your child's distance.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app uses your location to show your child's estimated position on a map.";
+				INFOPLIST_KEY_NSNearbyInteractionUsageDescription = "This app uses UWB to measure distance to your child's wearable device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "bluetooth-central location";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -294,8 +422,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = edu.gatech.StellaTrack;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thetolab.StellaTrack;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -309,6 +438,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		AA000009AAAA0009AAAAAAAA /* Build configuration list for PBXNativeTarget "StellaTrackTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA00000AAAAA000AAAAAAAAA /* Debug */,
+				AA00000BAAAA000BAAAAAAAA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		C60D8B7C2F804127006E6220 /* Build configuration list for PBXProject "StellaTrack" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
