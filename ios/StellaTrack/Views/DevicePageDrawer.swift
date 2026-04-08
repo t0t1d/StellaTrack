@@ -147,6 +147,7 @@ struct DevicePageDrawer: View {
 
     @GestureState private var alertPressing = false
     @State private var alertPressWorkItem: DispatchWorkItem?
+    @State private var longPressFired = false
 
     private var alertCard: some View {
         let enabled = alertEngine.settings.alertEnabled
@@ -158,17 +159,17 @@ struct DevicePageDrawer: View {
                     VStack(spacing: 2) {
                         Image(systemName: enabled ? "bell.fill" : "bell.slash")
                             .font(.system(size: 20))
-                            .foregroundStyle(enabled ? Color.orange : Color.gray)
+                            .foregroundStyle(enabled ? Color.orange : Color.blue)
                         Text(String(format: "%.0f m", alertEngine.settings.thresholdDistance))
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(enabled ? Color.orange : Color.gray)
+                            .foregroundStyle(enabled ? Color.orange : Color.blue)
                     }
                 }
                 .scaleEffect(alertPressing ? 0.92 : 1.0)
                 .animation(.easeInOut(duration: 0.15), value: alertPressing)
             Text("Alert")
                 .font(.caption)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.blue)
         }
         .contentShape(Rectangle())
         .gesture(
@@ -177,11 +178,12 @@ struct DevicePageDrawer: View {
                     pressing = true
                 }
                 .onChanged { _ in
-                    if alertPressWorkItem == nil {
+                    if alertPressWorkItem == nil && !longPressFired {
                         let work = DispatchWorkItem { [self] in
+                            longPressFired = true
+                            alertPressWorkItem = nil
                             alertEngine.setAlertEnabled(true)
                             onShowAlertSettings()
-                            alertPressWorkItem = nil
                         }
                         alertPressWorkItem = work
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
@@ -189,9 +191,8 @@ struct DevicePageDrawer: View {
                 }
                 .onEnded { value in
                     alertPressWorkItem?.cancel()
-                    let wasLongPress = alertPressWorkItem == nil
                     alertPressWorkItem = nil
-                    if !wasLongPress {
+                    if !longPressFired {
                         let dragDistance = sqrt(
                             pow(value.translation.width, 2) + pow(value.translation.height, 2)
                         )
@@ -199,6 +200,7 @@ struct DevicePageDrawer: View {
                             alertEngine.setAlertEnabled(!enabled)
                         }
                     }
+                    longPressFired = false
                 }
         )
     }

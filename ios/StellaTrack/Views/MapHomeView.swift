@@ -65,6 +65,8 @@ struct MapHomeView: View {
 
     @State private var visibleRegion: MKCoordinateRegion?
     @State private var alertRefreshToken = 0
+    @State private var currentCameraHeading: CLLocationDirection = 0
+    @Namespace private var mapScope
 
     private let peekDetent: PresentationDetent = .custom(PeekDetent.self)
     private let defaultDetent: PresentationDetent = .custom(ThirdDetent.self)
@@ -142,10 +144,9 @@ struct MapHomeView: View {
                 }
             }
         }
-        .onChange(of: locationManager.userLocation != nil) { _, hasLocation in
-            if hasLocation, let loc = locationManager.userLocation {
-                deviceManager.refreshMockDistances(userLocation: loc)
-            }
+        .onReceive(locationManager.$userLocation) { loc in
+            guard let loc else { return }
+            deviceManager.refreshMockDistances(userLocation: loc)
         }
         .onReceive(
             deviceManager.devices
@@ -161,8 +162,12 @@ struct MapHomeView: View {
     // MARK: - Map
 
     private var mapLayer: some View {
-            Map(position: $position) {
-                if locationManager.userLocation != nil { UserAnnotation() }
+            Map(position: $position, scope: mapScope) {
+                if let userLoc = locationManager.userLocation {
+                    Annotation("", coordinate: userLoc) {
+                        UserLocationDot(heading: locationManager.heading ?? 0, spanDelta: visibleRegion?.span.latitudeDelta)
+                    }
+                }
                 if let userLoc = locationManager.userLocation,
                    let device = selectedDevice {
                     let threshold = device.alertEngine.settings.thresholdDistance
@@ -189,10 +194,18 @@ struct MapHomeView: View {
             }
             .mapStyle(.standard(elevation: .flat))
             .mapControls {
-                MapCompass()
                 MapScaleView()
             }
-            .onMapCameraChange(frequency: .continuous) { visibleRegion = $0.region }
+            .overlay(alignment: .topTrailing) {
+                MapCompass(scope: mapScope)
+                    .padding(.top, 60)
+                    .padding(.trailing, 12)
+            }
+            .mapScope(mapScope)
+            .onMapCameraChange(frequency: .continuous) { context in
+                visibleRegion = context.region
+                currentCameraHeading = context.camera.heading
+            }
     }
 
     private var locationButton: some View {
@@ -266,7 +279,12 @@ struct MapHomeView: View {
                     longitude: coord.longitude
                 )
                 withAnimation {
-                    position = .region(MKCoordinateRegion(center: adjustedCenter, latitudinalMeters: span, longitudinalMeters: span))
+                    position = .camera(MapCamera(
+                        centerCoordinate: adjustedCenter,
+                        distance: span * 2.5,
+                        heading: currentCameraHeading,
+                        pitch: 0
+                    ))
                 }
             }
         } else {
@@ -498,7 +516,7 @@ struct MapHomeView: View {
             return
         }
         withAnimation(.easeInOut(duration: 0.4)) {
-            position = .camera(MapCamera(centerCoordinate: userLoc, distance: 1000))
+            position = .camera(MapCamera(centerCoordinate: userLoc, distance: 1000, heading: currentCameraHeading, pitch: 0))
         }
     }
 
@@ -514,7 +532,12 @@ struct MapHomeView: View {
             longitude: coord.longitude
         )
         withAnimation {
-            position = .region(MKCoordinateRegion(center: adjustedCenter, latitudinalMeters: span, longitudinalMeters: span))
+            position = .camera(MapCamera(
+                centerCoordinate: adjustedCenter,
+                distance: span * 2.5,
+                heading: currentCameraHeading,
+                pitch: 0
+            ))
         }
     }
 
@@ -539,6 +562,7 @@ struct MapHomeView: View {
     }
 
     private func alertColor(for device: TrackedDevice) -> Color {
+        guard device.alertEngine.settings.alertEnabled else { return .gray }
         switch device.alertEngine.currentLevel {
         case .safe: return .green
         case .warning: return .yellow
@@ -583,7 +607,7 @@ private struct DraggableDevicePin: View {
     @ViewBuilder
     var body: some View {
         let styled = pinVisual
-        if isMock {
+        if isMock && isSelected {
             styled
                 .offset(dragOffset)
                 .gesture(
@@ -677,6 +701,58 @@ private struct DraggableDevicePin: View {
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isDragging)
         .frame(width: 50, height: 70)
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - User location dot with heading cone
+
+private struct UserLocationDot: View {
+    let heading: CLLocationDirection
+    var spanDelta: Double?
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var coneColor: Color {
+        colorScheme == .dark ? Color.cyan : Color.blue
+    }
+
+    private var coneSize: CGFloat {
+        guard let span = spanDelta, span > 0 else { return 80 }
+        let scale = 0.005 / span
+        let size = 80 * max(0.8, min(scale, 4.0))
+        return size
+    }
+
+    var body: some View {
+        ZStack {
+            HeadingCone()
+                .fill(coneColor.opacity(colorScheme == .dark ? 0.4 : 0.2))
+                .frame(width: coneSize, height: coneSize)
+                .rotationEffect(.degrees(heading))
+
+            Circle()
+                .fill(coneColor.opacity(0.15))
+                .frame(width: 28, height: 28)
+            Circle()
+                .fill(.white)
+                .frame(width: 16, height: 16)
+            Circle()
+                .fill(.blue)
+                .frame(width: 12, height: 12)
+        }
+    }
+}
+
+private struct HeadingCone: Shape {
+    func path(in rect: CGRect) -> Path {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let radius = min(rect.width, rect.height) / 2
+        var path = Path()
+        path.move(to: center)
+        path.addArc(center: center, radius: radius,
+                    startAngle: .degrees(-25 - 90), endAngle: .degrees(25 - 90),
+                    clockwise: false)
+        path.closeSubpath()
+        return path
     }
 }
 

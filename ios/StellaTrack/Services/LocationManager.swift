@@ -32,6 +32,9 @@ class LocationManager: NSObject, ObservableObject {
         guard status == .authorizedWhenInUse || status == .authorizedAlways else { return }
         manager.startUpdatingLocation()
         manager.startUpdatingHeading()
+        if let h = manager.heading, h.trueHeading >= 0 {
+            heading = h.trueHeading
+        }
     }
 
     func stopUpdating() {

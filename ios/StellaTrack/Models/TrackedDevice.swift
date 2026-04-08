@@ -4,12 +4,38 @@ import CoreLocation
 
 @MainActor
 class TrackedDevice: ObservableObject, Identifiable {
-    static let availableIcons = [
-        "figure.child", "figure.walk", "figure.run",
-        "figure.roll", "figure.wave",
-        "hare.fill", "tortoise.fill", "dog.fill",
-        "cat.fill", "bird.fill"
+    static let iconSections: [(title: String, icons: [String])] = [
+        ("People", [
+            "figure.child", "figure.walk", "figure.run",
+            "figure.roll", "figure.wave", "figure.stand",
+            "figure.and.child.holdinghands", "person.fill",
+            "person.2.fill", "person.3.fill"
+        ]),
+        ("Animals", [
+            "hare.fill", "tortoise.fill", "dog.fill",
+            "cat.fill", "bird.fill", "fish.fill",
+            "lizard.fill", "ant.fill", "ladybug.fill", "pawprint.fill"
+        ]),
+        ("Objects", [
+            "bag.fill", "backpack.fill", "suitcase.fill",
+            "handbag.fill", "briefcase.fill", "key.fill",
+            "creditcard.fill", "umbrella.fill",
+            "teddybear.fill", "gift.fill"
+        ]),
+        ("Vehicles", [
+            "car.fill", "bicycle", "scooter",
+            "bus.fill", "tram.fill", "airplane",
+            "ferry.fill", "fuelpump.fill"
+        ]),
+        ("Tech", [
+            "iphone", "applewatch", "headphones",
+            "airpodspro", "laptopcomputer", "ipad",
+            "gamecontroller.fill", "camera.fill",
+            "tag.fill", "sensor.tag.radiowaves.forward"
+        ])
     ]
+
+    static let availableIcons: [String] = iconSections.flatMap(\.icons)
 
     private static var nextIconIndex = 0
 

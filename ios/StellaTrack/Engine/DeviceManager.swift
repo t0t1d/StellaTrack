@@ -19,9 +19,7 @@ class DeviceManager: ObservableObject {
         for device in devices {
             guard let mock = device.provider as? MockDistanceProvider,
                   let coord = device.mockCoordinate else { continue }
-            if device.alertEngine.latestDistance == 0 {
-                Self.sendMockReading(provider: mock, from: userLocation, to: coord)
-            }
+            Self.sendMockReading(provider: mock, from: userLocation, to: coord)
         }
     }
 

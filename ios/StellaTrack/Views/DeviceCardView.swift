@@ -4,6 +4,7 @@ struct DeviceCardView: View {
     @ObservedObject var device: TrackedDevice
 
     private var alertColor: Color {
+        guard device.alertEngine.settings.alertEnabled else { return .gray }
         switch device.alertEngine.currentLevel {
         case .safe: return .green
         case .warning: return .yellow

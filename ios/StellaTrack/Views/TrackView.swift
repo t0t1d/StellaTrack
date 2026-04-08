@@ -12,8 +12,11 @@ struct TrackView: View {
     @StateObject private var motionManager = MotionManager()
     @State private var direction: simd_float3?
     @State private var mapPosition: MapCameraPosition = .automatic
+    @State private var smoothedAngle: Double = 0
+    @State private var smoothedHeading: Double = 0
 
     private var alertColor: Color {
+        guard device.alertEngine.settings.alertEnabled else { return .gray }
         switch device.alertEngine.currentLevel {
         case .safe: return .green
         case .warning: return .yellow
@@ -42,7 +45,7 @@ struct TrackView: View {
         MapTrackCameraTrigger(
             lat: locationManager.userLocation?.latitude,
             lon: locationManager.userLocation?.longitude,
-            heading: locationManager.heading
+            heading: smoothedHeading
         )
     }
 
@@ -83,13 +86,29 @@ struct TrackView: View {
         }
         .onAppear {
             motionManager.startMonitoring()
+            updateSmoothedHeading()
             syncMapPosition()
+            updateMockDirection()
+            updateSmoothedAngle()
         }
         .onDisappear {
             motionManager.stopMonitoring()
         }
         .onReceive(device.provider.distancePublisher.receive(on: DispatchQueue.main)) { reading in
-            direction = reading.direction
+            if device.mockCoordinate != nil {
+                updateMockDirection()
+            } else {
+                direction = reading.direction
+            }
+            updateSmoothedAngle()
+        }
+        .onReceive(locationManager.$heading) { _ in
+            updateSmoothedHeading()
+            updateSmoothedAngle()
+        }
+        .onChange(of: locationManager.userLocation != nil) { _, _ in
+            updateMockDirection()
+            updateSmoothedAngle()
         }
     }
 
@@ -110,12 +129,11 @@ struct TrackView: View {
         .mapStyle(.standard(elevation: .flat))
         .mapCameraKeyframeAnimator(trigger: mapCameraTrigger) { camera in
             let center = locationManager.userLocation ?? camera.centerCoordinate
-            let heading = locationManager.heading ?? camera.heading
             KeyframeTrack(\MapCamera.centerCoordinate) {
                 LinearKeyframe(center, duration: 0.35)
             }
             KeyframeTrack(\MapCamera.heading) {
-                LinearKeyframe(heading, duration: 0.35)
+                LinearKeyframe(smoothedHeading, duration: 0.35)
             }
             KeyframeTrack(\MapCamera.distance) {
                 LinearKeyframe(280, duration: 0.35)
@@ -130,13 +148,13 @@ struct TrackView: View {
 
     private var centerContent: some View {
         VStack(spacing: 20) {
-            if let dir = direction {
+            if direction != nil {
                 Image(systemName: "location.north.fill")
                     .font(.system(size: 100, weight: .bold))
                     .foregroundStyle(alertColor)
-                    .rotationEffect(Angle(radians: Double(atan2(dir.x, dir.z))))
+                    .rotationEffect(.radians(smoothedAngle))
                     .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
-                    .animation(.easeInOut(duration: 0.22), value: direction)
+                    .animation(.easeInOut(duration: 0.3), value: smoothedAngle)
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "circle.dotted.circle")
@@ -179,14 +197,46 @@ struct TrackView: View {
             mapPosition = .automatic
             return
         }
-        let heading = locationManager.heading ?? 0
         let camera = MapCamera(
             centerCoordinate: center,
             distance: 280,
-            heading: heading,
+            heading: smoothedHeading,
             pitch: 0
         )
         mapPosition = .camera(camera)
+    }
+
+    private func updateMockDirection() {
+        guard let mockCoord = device.mockCoordinate,
+              let userLoc = locationManager.userLocation else { return }
+        let lat1 = userLoc.latitude * .pi / 180
+        let lon1 = userLoc.longitude * .pi / 180
+        let lat2 = mockCoord.latitude * .pi / 180
+        let lon2 = mockCoord.longitude * .pi / 180
+        let dLon = lon2 - lon1
+        let y = sin(dLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+        let bearing = atan2(y, x)
+        direction = simd_float3(Float(sin(bearing)), 0, Float(cos(bearing)))
+    }
+
+    private func updateSmoothedAngle() {
+        guard let dir = direction else { return }
+        let absoluteBearing = atan2(Double(dir.x), Double(dir.z))
+        let headingRad = (locationManager.heading ?? 0) * .pi / 180
+        let target = absoluteBearing - headingRad
+        var delta = target - smoothedAngle
+        while delta > .pi { delta -= 2 * .pi }
+        while delta < -.pi { delta += 2 * .pi }
+        smoothedAngle += delta
+    }
+
+    private func updateSmoothedHeading() {
+        let target = locationManager.heading ?? 0
+        var delta = target - smoothedHeading
+        while delta > 180 { delta -= 360 }
+        while delta < -180 { delta += 360 }
+        smoothedHeading += delta
     }
 }
 
@@ -195,5 +245,5 @@ struct TrackView: View {
 private struct MapTrackCameraTrigger: Equatable {
     let lat: CLLocationDegrees?
     let lon: CLLocationDegrees?
-    let heading: CLLocationDirection?
+    let heading: Double
 }
