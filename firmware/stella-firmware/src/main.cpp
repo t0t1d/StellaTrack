@@ -75,6 +75,21 @@ void setup() {
 
     UWBNearbySessionManager.begin("TS_DCU040");
 
+    // Build unique name from BLE MAC (available after begin).
+    {
+        String mac = BLE.address();
+        if (mac.length() >= 17) {
+            static char name[20];
+            snprintf(name, sizeof(name), "TS_DCU040-%c%c%c%c",
+                     toupper(mac.charAt(12)), toupper(mac.charAt(13)),
+                     toupper(mac.charAt(15)), toupper(mac.charAt(16)));
+            BLE.setLocalName(name);
+            BLE.setDeviceName(name);
+            Serial.print("[DIAG] Name: ");
+            Serial.println(name);
+        }
+    }
+
     // Try UWB init in setup with retries (not in BLE callback)
     for (int attempt = 1; attempt <= 3; attempt++) {
         Serial.print("[DIAG] UWB init attempt ");
@@ -263,6 +278,21 @@ void setup() {
     UWBNearbySessionManager.begin(BLE_DEVICE_NAME);
     Serial.println("[Stella] BLE OK");
 
+    // Build unique name from BLE MAC so multiple Stellas are distinguishable.
+    static char device_name[20];
+    {
+        String mac = BLE.address();
+        if (mac.length() >= 17) {
+            snprintf(device_name, sizeof(device_name), "Stella-%c%c%c%c",
+                     toupper(mac.charAt(12)), toupper(mac.charAt(13)),
+                     toupper(mac.charAt(15)), toupper(mac.charAt(16)));
+        } else {
+            strncpy(device_name, BLE_DEVICE_NAME, sizeof(device_name));
+        }
+        BLE.setLocalName(device_name);
+        BLE.setDeviceName(device_name);
+    }
+
     // UWB early init with retries (must happen before BLE connection)
     for (int attempt = 1; attempt <= 3; attempt++) {
         Serial.print("[Stella] UWB init attempt ");
@@ -291,7 +321,7 @@ void setup() {
     BLE.addService(appService);
 
     BLEAdvertisingData scanResponse;
-    scanResponse.setLocalName(BLE_DEVICE_NAME);
+    scanResponse.setLocalName(device_name);
     scanResponse.setAdvertisedService(appService);
     BLE.setScanResponseData(scanResponse);
 
@@ -318,6 +348,8 @@ void setup() {
     // reconfigures them from SPI mode to analog input.
     writeBattery();
 
+    Serial.print("[Stella] Name: ");
+    Serial.println(device_name);
     Serial.println("[Stella] Ready.");
 }
 
