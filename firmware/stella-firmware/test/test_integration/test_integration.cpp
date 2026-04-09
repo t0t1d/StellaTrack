@@ -139,18 +139,8 @@ void test_battery_level_reported_periodically(void) {
     TEST_ASSERT_TRUE(s_fw->begin());
     s_ble.simulateConnect();
 
-    s_gpio.analog_values[BATTERY_ADC_PIN] = 223;
-    const float pin_v = (223.0f / static_cast<float>(BATTERY_ADC_MAX)) * BATTERY_VREF;
-    const float batt_v = pin_v * BATTERY_DIVIDER;
-    float pct =
-        (batt_v - BATTERY_VOLTAGE_EMPTY) / (BATTERY_VOLTAGE_FULL - BATTERY_VOLTAGE_EMPTY) * 100.0f;
-    if (pct < 0.0f) {
-        pct = 0.0f;
-    }
-    if (pct > 100.0f) {
-        pct = 100.0f;
-    }
-    const int expected_pct = static_cast<int>(pct + 0.5f);
+    s_gpio.analog_values[0] = 2500;
+    const int expected_pct = 50;
 
     s_gpio.advanceMillis(BATTERY_REPORT_INTERVAL_MS);
     s_fw->update();
@@ -342,18 +332,8 @@ void test_ping_command_reports_battery(void) {
     TEST_ASSERT_TRUE(s_fw->begin());
     s_ble.simulateConnect();
 
-    s_gpio.analog_values[BATTERY_ADC_PIN] = 223;
-    const float pin_v2 = (223.0f / static_cast<float>(BATTERY_ADC_MAX)) * BATTERY_VREF;
-    const float batt_v2 = pin_v2 * BATTERY_DIVIDER;
-    float pct =
-        (batt_v2 - BATTERY_VOLTAGE_EMPTY) / (BATTERY_VOLTAGE_FULL - BATTERY_VOLTAGE_EMPTY) * 100.0f;
-    if (pct < 0.0f) {
-        pct = 0.0f;
-    }
-    if (pct > 100.0f) {
-        pct = 100.0f;
-    }
-    const int expected_pct = static_cast<int>(pct + 0.5f);
+    s_gpio.analog_values[0] = 2800;
+    const int expected_pct = 80;
 
     const uint8_t cmd[] = {CMD_PING, 0};
     s_ble.simulateWrite(CHAR_COMMAND_UUID, cmd, sizeof(cmd));

@@ -66,32 +66,23 @@ void test_recommended_ranging_rate_stays_active_if_motion_resumes_before_timeout
 }
 
 void test_battery_percent_at_full_voltage(void) {
-    pm->begin();
-    // 4.2V battery -> pin 4.2/5 = 0.84V -> ADC = 0.84/3.3 * 1023 ≈ 261
-    gpio.analog_values[BATTERY_ADC_PIN] = 261;
-    TEST_ASSERT_EQUAL(100, pm->readBatteryPercent());
+    // CR2032 full = 3000 mV
+    TEST_ASSERT_EQUAL(100, PowerManager::batteryPercentFromMillivolts(3000));
 }
 
 void test_battery_percent_at_empty_voltage(void) {
-    pm->begin();
-    // 3.0V battery -> pin 3.0/5 = 0.60V -> ADC = 0.60/3.3 * 1023 ≈ 186
-    gpio.analog_values[BATTERY_ADC_PIN] = 186;
-    TEST_ASSERT_EQUAL(0, pm->readBatteryPercent());
+    // CR2032 empty = 2000 mV
+    TEST_ASSERT_EQUAL(0, PowerManager::batteryPercentFromMillivolts(2000));
 }
 
 void test_battery_percent_at_mid_voltage(void) {
-    pm->begin();
-    // 3.6V battery -> pin 3.6/5 = 0.72V -> ADC = 0.72/3.3 * 1023 ≈ 223
-    gpio.analog_values[BATTERY_ADC_PIN] = 223;
-    TEST_ASSERT_EQUAL(50, pm->readBatteryPercent());
+    // 2500 mV = halfway
+    TEST_ASSERT_EQUAL(50, PowerManager::batteryPercentFromMillivolts(2500));
 }
 
 void test_battery_percent_clamps_to_range(void) {
-    pm->begin();
-    gpio.analog_values[BATTERY_ADC_PIN] = 0;
-    TEST_ASSERT_EQUAL(0, pm->readBatteryPercent());
-    gpio.analog_values[BATTERY_ADC_PIN] = 1023;
-    TEST_ASSERT_EQUAL(100, pm->readBatteryPercent());
+    TEST_ASSERT_EQUAL(0, PowerManager::batteryPercentFromMillivolts(1500));
+    TEST_ASSERT_EQUAL(100, PowerManager::batteryPercentFromMillivolts(3500));
 }
 
 void test_should_report_battery_every_30s(void) {

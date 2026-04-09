@@ -172,15 +172,55 @@ static void rangingHandler(UWBRangingData& rangingData) {
     }
 }
 
+// Read nRF52840 supply voltage via the internal SAADC VDD channel.
+// On CR2032 battery this IS the battery voltage; on USB it reads ~3300 mV.
+// Uses 0.6 V internal reference with 1/6 gain → full-scale 3.6 V, 12-bit.
+static int readSupplyMillivolts() {
+    NRF_SAADC->RESOLUTION = NRF_SAADC_RESOLUTION_12BIT;
+    NRF_SAADC->CH[0].PSELP = NRF_SAADC_INPUT_VDD;
+    NRF_SAADC->CH[0].PSELN = NRF_SAADC_INPUT_DISABLED;
+    NRF_SAADC->CH[0].CONFIG =
+        (NRF_SAADC_RESISTOR_DISABLED   << SAADC_CH_CONFIG_RESP_Pos)   |
+        (NRF_SAADC_RESISTOR_DISABLED   << SAADC_CH_CONFIG_RESN_Pos)   |
+        (NRF_SAADC_GAIN1_6             << SAADC_CH_CONFIG_GAIN_Pos)   |
+        (NRF_SAADC_REFERENCE_INTERNAL  << SAADC_CH_CONFIG_REFSEL_Pos) |
+        (NRF_SAADC_ACQTIME_10US       << SAADC_CH_CONFIG_TACQ_Pos)   |
+        (NRF_SAADC_MODE_SINGLE_ENDED   << SAADC_CH_CONFIG_MODE_Pos)   |
+        (NRF_SAADC_BURST_DISABLED      << SAADC_CH_CONFIG_BURST_Pos);
+
+    volatile int16_t result = 0;
+    NRF_SAADC->RESULT.PTR    = (uint32_t)&result;
+    NRF_SAADC->RESULT.MAXCNT = 1;
+
+    NRF_SAADC->ENABLE = SAADC_ENABLE_ENABLE_Enabled;
+
+    NRF_SAADC->EVENTS_STARTED = 0;
+    NRF_SAADC->TASKS_START    = 1;
+    while (!NRF_SAADC->EVENTS_STARTED);
+
+    NRF_SAADC->EVENTS_END  = 0;
+    NRF_SAADC->TASKS_SAMPLE = 1;
+    while (!NRF_SAADC->EVENTS_END);
+
+    NRF_SAADC->EVENTS_STOPPED = 0;
+    NRF_SAADC->TASKS_STOP     = 1;
+    while (!NRF_SAADC->EVENTS_STOPPED);
+
+    NRF_SAADC->ENABLE = SAADC_ENABLE_ENABLE_Disabled;
+
+    if (result < 0) result = 0;
+    return (result * 3600) / 4096;
+}
+
 static void writeBattery() {
-    int raw = analogRead(BATTERY_ADC_PIN);
-    int pct = s_power.readBatteryPercent();
-    Serial.print("[Stella] battery raw=");
-    Serial.print(raw);
-    Serial.print(" pct=");
-    Serial.println(pct);
+    int mv  = readSupplyMillivolts();
+    int pct = (mv - BATTERY_MV_EMPTY) * 100 / (BATTERY_MV_FULL - BATTERY_MV_EMPTY);
     if (pct < 0)   pct = 0;
     if (pct > 100) pct = 100;
+    Serial.print("[Stella] battery ");
+    Serial.print(mv);
+    Serial.print("mV pct=");
+    Serial.println(pct);
     uint8_t val = static_cast<uint8_t>(pct);
     batteryChar.writeValue(&val, 1);
 }
@@ -221,11 +261,7 @@ static void onCommandWritten(BLEDevice, BLECharacteristic characteristic) {
     uint8_t param = (len >= 2) ? data[1] : 0;
 
     if (code == CMD_PING) {
-        int pct = s_power.readBatteryPercent();
-        if (pct < 0)   pct = 0;
-        if (pct > 100) pct = 100;
-        uint8_t val = static_cast<uint8_t>(pct);
-        batteryChar.writeValue(&val, 1);
+        writeBattery();
         return;
     }
 
@@ -252,10 +288,11 @@ static void onButtonLong(void*) {
 }
 
 void setup() {
-    // LED_PWR is active-low: HIGH = off.
+    // LED_PWR is active-low. Keep it ON during boot so the user can see
+    // the board is alive (especially on battery where there's no serial).
+    // It turns off at the end of setup() to save power.
     pinMode(LED_PWR, OUTPUT);
-    digitalWrite(LED_PWR, HIGH);
-    // Keep PIN_ENABLE_SENSORS_3V3 HIGH -- the UWB SPI bus needs this rail.
+    digitalWrite(LED_PWR, LOW);
 
     Serial.begin(115200);
     unsigned long t0 = millis();
@@ -267,8 +304,20 @@ void setup() {
     Serial.print(" HW=");
     Serial.println(HW_MODEL);
 
-    UWB.registerRangingCallback(rangingHandler);
+    // Early supply voltage check (diagnostic).
+    // Discard first SAADC sample -- nRF52840 gives a stale reading on cold boot.
+    {
+        (void)readSupplyMillivolts();
+        delay(2);
+        int mv = readSupplyMillivolts();
+        Serial.print("[Stella] Boot VDD: ");
+        Serial.print(mv);
+        Serial.println("mV");
+    }
 
+    // --- BLE ---
+    // Register callbacks before begin().
+    UWB.registerRangingCallback(rangingHandler);
     UWBNearbySessionManager.onConnect(clientConnected);
     UWBNearbySessionManager.onDisconnect(clientDisconnected);
     UWBNearbySessionManager.onSessionStart(sessionStarted);
@@ -293,28 +342,8 @@ void setup() {
         BLE.setDeviceName(device_name);
     }
 
-    // UWB early init with retries (must happen before BLE connection)
-    for (int attempt = 1; attempt <= 3; attempt++) {
-        Serial.print("[Stella] UWB init attempt ");
-        Serial.print(attempt);
-        Serial.println("/3...");
-        UWB.begin();
-        uint8_t st = UWB.state();
-        Serial.print("[Stella] UWB.state() = ");
-        Serial.println(st);
-        if (st == 0) {
-            uwb_ready = true;
-            Serial.println("[Stella] UWB ready");
-            break;
-        }
-        Serial.println("[Stella] UWB init failed, retrying...");
-        UWB.end();
-        delay(2000);
-    }
-    if (!uwb_ready) {
-        Serial.println("[Stella] WARNING: UWB unavailable after 3 attempts");
-    }
-
+    // Register custom service and characteristics BEFORE UWB init,
+    // so BLE is fully discoverable even if UWB takes time or fails.
     appService.addCharacteristic(batteryChar);
     appService.addCharacteristic(commandChar);
     appService.addCharacteristic(deviceInfoChar);
@@ -331,10 +360,36 @@ void setup() {
     deviceInfoChar.writeValue(
         reinterpret_cast<const uint8_t*>(info),
         static_cast<int>(strlen(info)));
-
     commandChar.setEventHandler(BLEWritten, onCommandWritten);
 
-    // GPIO peripherals after UWB.
+    Serial.print("[Stella] Name: ");
+    Serial.println(device_name);
+
+    // --- UWB ---
+    // Init after BLE is fully configured. Retry loop with shorter delay
+    // to reduce current draw time on battery.
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        Serial.print("[Stella] UWB init attempt ");
+        Serial.print(attempt);
+        Serial.println("/3...");
+        UWB.begin();
+        uint8_t st = UWB.state();
+        Serial.print("[Stella] UWB.state() = ");
+        Serial.println(st);
+        if (st == 0) {
+            uwb_ready = true;
+            Serial.println("[Stella] UWB ready");
+            break;
+        }
+        Serial.println("[Stella] UWB init failed, retrying...");
+        UWB.end();
+        delay(1000);
+    }
+    if (!uwb_ready) {
+        Serial.println("[Stella] WARNING: UWB unavailable after 3 attempts");
+    }
+
+    // --- GPIO peripherals ---
     // Do NOT call s_power.begin() -- Wire.begin() conflicts with UWB SPI.
     s_commands.begin();
     s_button.begin();
@@ -342,14 +397,10 @@ void setup() {
     s_button.setOnLongPress(onButtonLong, nullptr);
     s_bonding.begin();
 
-    // Write initial battery value so iOS doesn't see 0% on first read.
-    // Only reads A6 (BATTERY_ADC_PIN) -- do NOT scan other analog pins,
-    // as some share nRF GPIOs with the UWB SPI bus and analogRead()
-    // reconfigures them from SPI mode to analog input.
     writeBattery();
 
-    Serial.print("[Stella] Name: ");
-    Serial.println(device_name);
+    // Boot complete -- turn off LED to save power.
+    digitalWrite(LED_PWR, HIGH);
     Serial.println("[Stella] Ready.");
 }
 
@@ -365,11 +416,14 @@ void loop() {
     unsigned long now = millis();
     if (now - last_heartbeat_ms >= 5000) {
         last_heartbeat_ms = now;
+        int mv = readSupplyMillivolts();
         Serial.print("[Stella] alive t=");
         Serial.print(now / 1000);
         Serial.print("s conns=");
         Serial.print(numConnected);
-        Serial.print(" ranging=");
+        Serial.print(" vdd=");
+        Serial.print(mv);
+        Serial.print("mV ranging=");
         Serial.println(ranging_active ? "yes" : "no");
     }
 

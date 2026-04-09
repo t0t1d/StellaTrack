@@ -14,6 +14,7 @@ public:
     bool isMotionDetected();
     uint8_t getRecommendedRangingRate();
     int readBatteryPercent();
+    static int batteryPercentFromMillivolts(int mv);
     bool shouldReportBattery();
     DeviceState getRecommendedState();
 

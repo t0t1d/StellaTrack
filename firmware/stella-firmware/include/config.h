@@ -40,14 +40,10 @@
 #define MOTION_TIMEOUT_MS       10000
 #define SLEEP_TIMEOUT_MS        60000
 
-// --- Battery ---
+// --- Battery (CR2032 coin cell, read via nRF52840 internal VDD channel) ---
 #define BATTERY_REPORT_INTERVAL_MS 30000
-#define BATTERY_ADC_PIN         20
-#define BATTERY_ADC_MAX         1023
-#define BATTERY_VREF            3.3f
-#define BATTERY_DIVIDER         5.0f
-#define BATTERY_VOLTAGE_FULL    4.2f
-#define BATTERY_VOLTAGE_EMPTY   3.0f
+#define BATTERY_MV_FULL         3000
+#define BATTERY_MV_EMPTY        2000
 
 // --- Bonding ---
 #define MAX_BONDS               4
