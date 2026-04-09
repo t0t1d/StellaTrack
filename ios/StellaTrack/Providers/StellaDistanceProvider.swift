@@ -53,7 +53,7 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
 
     let peripheralIdentifier: UUID
     private var peripheral: PeripheralManaging
-    private let centralManager: CentralManaging
+    private var centralManager: CentralManaging
 
     private var commandCharID: CBUUID?
     private var batteryCharID: CBUUID?
@@ -132,6 +132,10 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
 
     func replacePeripheral(_ newPeripheral: PeripheralManaging) {
         peripheral = newPeripheral
+    }
+
+    func replaceCentralManager(_ newCentral: CentralManaging) {
+        centralManager = newCentral
     }
 
     // MARK: - BLE State Machine Handlers
@@ -321,9 +325,12 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
     // MARK: - Private
 
     private func writeCommand(_ command: StellaConstants.DeviceCommand, parameter: UInt8 = 0) {
-        guard let commandCharID else { return }
+        guard let commandCharID else {
+            bleLog.log("[BLE] writeCommand(\(command)) SKIPPED — commandCharID is nil", level: .error)
+            return
+        }
         let data = command.data(parameter: parameter)
-        bleLog.log("[BLE] Writing to \(commandCharID.uuidString): \(data.hexString)")
+        bleLog.log("[BLE] Writing command to \(commandCharID.uuidString): \(data.hexString)")
         peripheral.writeValue(data, for: commandCharID, type: .withResponse)
     }
 
@@ -367,7 +374,16 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
             bleLog.log("BLE not connected — triggering reconnect", level: .warning)
             centralManager.connectPeripheral(identifier: peripheralIdentifier, options: nil)
         case .connected, .ranging:
-            if niSession == nil, let configData = lastAccessoryConfigData {
+            if let session = niSession, let configData = lastAccessoryConfigData {
+                bleLog.log("Re-running existing NISession after foreground resume", level: .warning)
+                do {
+                    let config = try NINearbyAccessoryConfiguration(data: configData)
+                    session.run(config)
+                } catch {
+                    bleLog.log("Failed to re-run NISession: \(error), requesting fresh init", level: .error)
+                    sendFreshInitCommand()
+                }
+            } else if niSession == nil, let configData = lastAccessoryConfigData {
                 bleLog.log("NISession gone — restarting with cached config", level: .warning)
                 startNISession(with: configData)
             } else if niSession == nil {
@@ -555,6 +571,18 @@ extension StellaDistanceProvider: CBPeripheralDelegate {
             }
         }
     }
+
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        let charUUID = characteristic.uuid.uuidString
+        let errDesc = error?.localizedDescription
+        Task { @MainActor in
+            if let errDesc {
+                bleLog.log("[BLE] Write to \(charUUID) FAILED: \(errDesc)", level: .error)
+            } else {
+                bleLog.log("[BLE] Write to \(charUUID) confirmed", level: .success)
+            }
+        }
+    }
 }
 
 // MARK: - NISessionDelegate
@@ -606,13 +634,20 @@ extension StellaDistanceProvider: NISessionDelegate {
 
     nonisolated func sessionSuspensionEnded(_ session: NISession) {
         Task { @MainActor in
-            bleLog.log("[NI] session suspension ended — attempting to re-run", level: .success)
+            bleLog.log("[NI] session suspension ended — re-running existing session", level: .success)
             guard let configData = lastAccessoryConfigData else {
                 bleLog.log("[NI] no cached config to re-run, requesting fresh init", level: .warning)
                 sendFreshInitCommand()
                 return
             }
-            startNISession(with: configData)
+            do {
+                let config = try NINearbyAccessoryConfiguration(data: configData)
+                session.run(config)
+                bleLog.log("[NI] re-ran existing session after suspension", level: .success)
+            } catch {
+                bleLog.log("[NI] failed to re-run session: \(error), requesting fresh init", level: .error)
+                sendFreshInitCommand()
+            }
         }
     }
 }
@@ -654,7 +689,11 @@ final class CBPeripheralWrapper: PeripheralManaging {
     }
 
     func writeValue(_ data: Data, for characteristicID: CBUUID, type: CBCharacteristicWriteType) {
-        guard let char = findCharacteristic(characteristicID) else { return }
+        guard let char = findCharacteristic(characteristicID) else {
+            BLEDebugLog.shared.log("[Wrapper] writeValue FAILED — char \(characteristicID.uuidString) not found on peripheral \(cbPeripheral.identifier)", level: .error)
+            return
+        }
+        BLEDebugLog.shared.log("[Wrapper] writeValue \(data.hexString) -> char \(characteristicID.uuidString)", level: .success)
         cbPeripheral.writeValue(data, for: char, type: type)
     }
 
