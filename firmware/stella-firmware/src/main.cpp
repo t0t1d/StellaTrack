@@ -58,9 +58,12 @@ static bool tryUwbInit() {
 }
 
 void setup() {
+    pinMode(LED_PWR, OUTPUT);
+    digitalWrite(LED_PWR, HIGH);
+
     Serial.begin(115200);
     unsigned long t0 = millis();
-    while (!Serial && (millis() - t0 < 3000)) delay(10);
+    while (!Serial && (millis() - t0 < 2000)) delay(10);
 
     Serial.println("=== DIAG: UWB early-init with retries ===");
 
@@ -154,13 +157,27 @@ static void rangingHandler(UWBRangingData& rangingData) {
     }
 }
 
+static void writeBattery() {
+    int raw = analogRead(BATTERY_ADC_PIN);
+    int pct = s_power.readBatteryPercent();
+    Serial.print("[Stella] battery raw=");
+    Serial.print(raw);
+    Serial.print(" pct=");
+    Serial.println(pct);
+    if (pct < 0)   pct = 0;
+    if (pct > 100) pct = 100;
+    uint8_t val = static_cast<uint8_t>(pct);
+    batteryChar.writeValue(&val, 1);
+}
+
+static bool battery_update_pending = false;
+
 static void clientConnected(BLEDevice dev) {
     Serial.print("[Stella] BLE client connected: ");
     Serial.println(dev.address());
-    Serial.print("[Stella] UWB ready: ");
-    Serial.println(uwb_ready ? "YES" : "NO");
     numConnected++;
     s_power.notifyConnected();
+    battery_update_pending = true;
 }
 
 static void clientDisconnected(BLEDevice dev) {
@@ -220,9 +237,14 @@ static void onButtonLong(void*) {
 }
 
 void setup() {
+    // LED_PWR is active-low: HIGH = off.
+    pinMode(LED_PWR, OUTPUT);
+    digitalWrite(LED_PWR, HIGH);
+    // Keep PIN_ENABLE_SENSORS_3V3 HIGH -- the UWB SPI bus needs this rail.
+
     Serial.begin(115200);
     unsigned long t0 = millis();
-    while (!Serial && (millis() - t0 < 5000)) delay(10);
+    while (!Serial && (millis() - t0 < 2000)) delay(10);
 
     Serial.println("[Stella] Firmware starting...");
     Serial.print("[Stella] FW=");
@@ -282,22 +304,20 @@ void setup() {
 
     commandChar.setEventHandler(BLEWritten, onCommandWritten);
 
-    // Initialize GPIO peripherals AFTER UWB.
-    // Do NOT call s_power.begin() -- it calls Wire.begin() which shares
-    // a hardware instance (TWIM0/SPIM0) with the UWB SPI on nRF52840,
-    // causing SPI write failures during the NI handshake.
-    // Battery reading (analogRead) works without begin().
-    // Accelerometer (motion detection) is disabled until I2C conflict is resolved.
+    // GPIO peripherals after UWB.
+    // Do NOT call s_power.begin() -- Wire.begin() conflicts with UWB SPI.
     s_commands.begin();
     s_button.begin();
     s_button.setOnShortPress(onButtonShort, nullptr);
     s_button.setOnLongPress(onButtonLong, nullptr);
     s_bonding.begin();
 
-    Serial.print("[Stella] Name: ");
-    Serial.println(BLE_DEVICE_NAME);
-    Serial.print("[Stella] App svc: ");
-    Serial.println(SERVICE_UUID);
+    // Write initial battery value so iOS doesn't see 0% on first read.
+    // Only reads A6 (BATTERY_ADC_PIN) -- do NOT scan other analog pins,
+    // as some share nRF GPIOs with the UWB SPI bus and analogRead()
+    // reconfigures them from SPI mode to analog input.
+    writeBattery();
+
     Serial.println("[Stella] Ready.");
 }
 
@@ -321,21 +341,9 @@ void loop() {
         Serial.println(ranging_active ? "yes" : "no");
     }
 
-    if (numConnected > 0 && s_power.shouldReportBattery()) {
-        int pct = s_power.readBatteryPercent();
-        if (pct < 0)   pct = 0;
-        if (pct > 100) pct = 100;
-        uint8_t val = static_cast<uint8_t>(pct);
-        batteryChar.writeValue(&val, 1);
-    }
-
-    if (s_bonding.isPairingMode()) {
-        unsigned long now_p = s_gpio.millis();
-        if (now_p - pairing_blink_ms >= 500) {
-            pairing_led_state = !pairing_led_state;
-            s_gpio.digitalWrite(PIN_LED_USER, pairing_led_state ? 1 : 0);
-            pairing_blink_ms = now_p;
-        }
+    if (numConnected > 0 && (battery_update_pending || s_power.shouldReportBattery())) {
+        battery_update_pending = false;
+        writeBattery();
     }
 }
 

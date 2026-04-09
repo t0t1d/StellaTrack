@@ -124,7 +124,7 @@ void test_begin_configures_pins(void) {
     fresh_cmd.begin();
 
     TEST_ASSERT_TRUE(fresh_gpio.pin_modes.count(PIN_BUZZER) > 0);
-    TEST_ASSERT_TRUE(fresh_gpio.pin_modes.count(PIN_LED_USER) > 0);
+    // PIN_LED_USER (13) is SPI_SCK -- begin() no longer touches it.
 }
 
 int main(int argc, char** argv) {

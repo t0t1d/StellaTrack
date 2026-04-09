@@ -2,8 +2,8 @@
 
 void CommandHandler::begin() {
     gpio_->pinMode(PIN_BUZZER, 1);
-    gpio_->pinMode(PIN_LED_USER, 1);
-    gpio_->digitalWrite(PIN_LED_USER, 0);
+    // PIN_LED_USER (13) is also SPI_SCK -- do not reconfigure it as GPIO
+    // or it will break UWB SPI. LED control is a no-op until a real LED pin is identified.
     led_on_ = false;
     buzzer_active_ = false;
     buzzer_timed_ = false;

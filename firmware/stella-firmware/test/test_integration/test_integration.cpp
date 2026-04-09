@@ -139,10 +139,11 @@ void test_battery_level_reported_periodically(void) {
     TEST_ASSERT_TRUE(s_fw->begin());
     s_ble.simulateConnect();
 
-    s_gpio.analog_values[BATTERY_ADC_PIN] = 3102;
-    const float voltage = (3102.0f / static_cast<float>(BATTERY_ADC_MAX)) * BATTERY_VREF;
+    s_gpio.analog_values[BATTERY_ADC_PIN] = 223;
+    const float pin_v = (223.0f / static_cast<float>(BATTERY_ADC_MAX)) * BATTERY_VREF;
+    const float batt_v = pin_v * BATTERY_DIVIDER;
     float pct =
-        (voltage - BATTERY_VOLTAGE_MIN) / (BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN) * 100.0f;
+        (batt_v - BATTERY_VOLTAGE_EMPTY) / (BATTERY_VOLTAGE_FULL - BATTERY_VOLTAGE_EMPTY) * 100.0f;
     if (pct < 0.0f) {
         pct = 0.0f;
     }
@@ -341,10 +342,11 @@ void test_ping_command_reports_battery(void) {
     TEST_ASSERT_TRUE(s_fw->begin());
     s_ble.simulateConnect();
 
-    s_gpio.analog_values[BATTERY_ADC_PIN] = 1600;
-    const float voltage = (1600.0f / static_cast<float>(BATTERY_ADC_MAX)) * BATTERY_VREF;
+    s_gpio.analog_values[BATTERY_ADC_PIN] = 223;
+    const float pin_v2 = (223.0f / static_cast<float>(BATTERY_ADC_MAX)) * BATTERY_VREF;
+    const float batt_v2 = pin_v2 * BATTERY_DIVIDER;
     float pct =
-        (voltage - BATTERY_VOLTAGE_MIN) / (BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN) * 100.0f;
+        (batt_v2 - BATTERY_VOLTAGE_EMPTY) / (BATTERY_VOLTAGE_FULL - BATTERY_VOLTAGE_EMPTY) * 100.0f;
     if (pct < 0.0f) {
         pct = 0.0f;
     }

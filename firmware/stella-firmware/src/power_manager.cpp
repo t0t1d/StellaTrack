@@ -30,15 +30,12 @@ uint8_t PowerManager::getRecommendedRangingRate() {
 
 int PowerManager::readBatteryPercent() {
     int raw = gpio_->analogRead(BATTERY_ADC_PIN);
-    float voltage = (static_cast<float>(raw) / static_cast<float>(BATTERY_ADC_MAX)) * BATTERY_VREF;
+    float pin_v = (static_cast<float>(raw) / static_cast<float>(BATTERY_ADC_MAX)) * BATTERY_VREF;
+    float batt_v = pin_v * BATTERY_DIVIDER;
     float pct =
-        (voltage - BATTERY_VOLTAGE_MIN) / (BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN) * 100.0f;
-    if (pct < 0.0f) {
-        pct = 0.0f;
-    }
-    if (pct > 100.0f) {
-        pct = 100.0f;
-    }
+        (batt_v - BATTERY_VOLTAGE_EMPTY) / (BATTERY_VOLTAGE_FULL - BATTERY_VOLTAGE_EMPTY) * 100.0f;
+    if (pct < 0.0f)   pct = 0.0f;
+    if (pct > 100.0f)  pct = 100.0f;
     return static_cast<int>(pct + 0.5f);
 }
 

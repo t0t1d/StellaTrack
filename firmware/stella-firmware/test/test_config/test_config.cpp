@@ -62,7 +62,7 @@ void test_power_management_constants(void) {
 
 void test_battery_constants(void) {
     TEST_ASSERT_EQUAL(30000, BATTERY_REPORT_INTERVAL_MS);
-    TEST_ASSERT_TRUE(BATTERY_VOLTAGE_MAX > BATTERY_VOLTAGE_MIN);
+    TEST_ASSERT_TRUE(BATTERY_VOLTAGE_FULL > BATTERY_VOLTAGE_EMPTY);
 }
 
 void test_max_bonds(void) {

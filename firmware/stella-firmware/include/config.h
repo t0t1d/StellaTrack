@@ -42,11 +42,12 @@
 
 // --- Battery ---
 #define BATTERY_REPORT_INTERVAL_MS 30000
-#define BATTERY_ADC_PIN         14
-#define BATTERY_ADC_MAX         4095
+#define BATTERY_ADC_PIN         20
+#define BATTERY_ADC_MAX         1023
 #define BATTERY_VREF            3.3f
-#define BATTERY_VOLTAGE_MIN     2.0f
-#define BATTERY_VOLTAGE_MAX     3.0f
+#define BATTERY_DIVIDER         5.0f
+#define BATTERY_VOLTAGE_FULL    4.2f
+#define BATTERY_VOLTAGE_EMPTY   3.0f
 
 // --- Bonding ---
 #define MAX_BONDS               4

@@ -65,24 +65,24 @@ void test_recommended_ranging_rate_stays_active_if_motion_resumes_before_timeout
     TEST_ASSERT_EQUAL(UWB_RANGING_RATE_ACTIVE_HZ, pm->getRecommendedRangingRate());
 }
 
-void test_battery_percent_at_max_voltage(void) {
+void test_battery_percent_at_full_voltage(void) {
     pm->begin();
-    // 3.0V -> ADC = 3.0/3.3 * 4095 ≈ 3723
-    gpio.analog_values[BATTERY_ADC_PIN] = 3723;
+    // 4.2V battery -> pin 4.2/5 = 0.84V -> ADC = 0.84/3.3 * 1023 ≈ 261
+    gpio.analog_values[BATTERY_ADC_PIN] = 261;
     TEST_ASSERT_EQUAL(100, pm->readBatteryPercent());
 }
 
-void test_battery_percent_at_min_voltage(void) {
+void test_battery_percent_at_empty_voltage(void) {
     pm->begin();
-    // 2.0V -> ADC = 2.0/3.3 * 4095 ≈ 2482
-    gpio.analog_values[BATTERY_ADC_PIN] = 2482;
+    // 3.0V battery -> pin 3.0/5 = 0.60V -> ADC = 0.60/3.3 * 1023 ≈ 186
+    gpio.analog_values[BATTERY_ADC_PIN] = 186;
     TEST_ASSERT_EQUAL(0, pm->readBatteryPercent());
 }
 
 void test_battery_percent_at_mid_voltage(void) {
     pm->begin();
-    // 2.5V -> ADC = 2.5/3.3 * 4095 ≈ 3102
-    gpio.analog_values[BATTERY_ADC_PIN] = 3102;
+    // 3.6V battery -> pin 3.6/5 = 0.72V -> ADC = 0.72/3.3 * 1023 ≈ 223
+    gpio.analog_values[BATTERY_ADC_PIN] = 223;
     TEST_ASSERT_EQUAL(50, pm->readBatteryPercent());
 }
 
@@ -90,7 +90,7 @@ void test_battery_percent_clamps_to_range(void) {
     pm->begin();
     gpio.analog_values[BATTERY_ADC_PIN] = 0;
     TEST_ASSERT_EQUAL(0, pm->readBatteryPercent());
-    gpio.analog_values[BATTERY_ADC_PIN] = 4095;
+    gpio.analog_values[BATTERY_ADC_PIN] = 1023;
     TEST_ASSERT_EQUAL(100, pm->readBatteryPercent());
 }
 
@@ -149,8 +149,8 @@ int main(int argc, char** argv) {
     RUN_TEST(test_recommended_ranging_rate_active_when_motion);
     RUN_TEST(test_recommended_ranging_rate_idle_after_motion_timeout);
     RUN_TEST(test_recommended_ranging_rate_stays_active_if_motion_resumes_before_timeout);
-    RUN_TEST(test_battery_percent_at_max_voltage);
-    RUN_TEST(test_battery_percent_at_min_voltage);
+    RUN_TEST(test_battery_percent_at_full_voltage);
+    RUN_TEST(test_battery_percent_at_empty_voltage);
     RUN_TEST(test_battery_percent_at_mid_voltage);
     RUN_TEST(test_battery_percent_clamps_to_range);
     RUN_TEST(test_should_report_battery_every_30s);
