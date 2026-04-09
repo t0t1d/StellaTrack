@@ -134,7 +134,7 @@ final class StellaDistanceProviderTests: XCTestCase {
 
         let written = mockPeripheral.lastWrittenData
         XCTAssertNotNil(written)
-        XCTAssertEqual([UInt8](written!), [0x01, 3])
+        XCTAssertEqual([UInt8](written!), [0x01, 5])
     }
 
     func testStopSoundWritesCommand() {

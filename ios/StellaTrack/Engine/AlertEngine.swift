@@ -21,7 +21,7 @@ class AlertEngine: ObservableObject {
         self.settings = settings
 
         provider.distancePublisher
-            .receive(on: RunLoop.main)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] reading in
                 self?.processReading(reading)
             }

@@ -121,7 +121,7 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
     }
 
     func playSound() {
-        writeCommand(.playSound, parameter: 3)
+        writeCommand(.playSound, parameter: 5)
     }
 
     func stopSound() {

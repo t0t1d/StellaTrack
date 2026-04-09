@@ -159,7 +159,7 @@ struct DevicePageDrawer: View {
         let enabled = alertEngine.settings.alertEnabled
         return VStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 14)
-                .fill(enabled ? Color.orange.opacity(0.15) : Color(.systemGray6))
+                .fill(enabled ? Color.orange.opacity(0.15) : Color(.systemGray5))
                 .frame(height: 56)
                 .overlay {
                     VStack(spacing: 2) {
@@ -238,7 +238,7 @@ struct DevicePageDrawer: View {
         } label: {
             VStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(soundPlaying ? Color.orange.opacity(0.15) : Color(.systemGray6))
+                    .fill(soundPlaying ? Color.orange.opacity(0.15) : Color(.systemGray5))
                     .frame(height: 56)
                     .overlay {
                         Image(systemName: soundPlaying ? "speaker.wave.2.fill" : "speaker.wave.2")
@@ -263,7 +263,7 @@ struct DevicePageDrawer: View {
         Button(action: onTrack) {
             VStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color(.systemGray6))
+                    .fill(Color(.systemGray5))
                     .frame(height: 56)
                     .overlay {
                         Image(systemName: "location.north.fill")
