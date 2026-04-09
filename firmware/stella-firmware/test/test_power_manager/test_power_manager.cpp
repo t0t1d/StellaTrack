@@ -1,7 +1,3 @@
-#ifndef A0
-#define A0 14
-#endif
-
 #include <unity.h>
 #include "config.h"
 #include "power_manager.h"
@@ -71,27 +67,30 @@ void test_recommended_ranging_rate_stays_active_if_motion_resumes_before_timeout
 
 void test_battery_percent_at_max_voltage(void) {
     pm->begin();
-    gpio.analog_values[BATTERY_ADC_PIN] = 1023;
+    // 3.0V -> ADC = 3.0/3.3 * 4095 ≈ 3723
+    gpio.analog_values[BATTERY_ADC_PIN] = 3723;
     TEST_ASSERT_EQUAL(100, pm->readBatteryPercent());
 }
 
 void test_battery_percent_at_min_voltage(void) {
     pm->begin();
-    gpio.analog_values[BATTERY_ADC_PIN] = 0;
+    // 2.0V -> ADC = 2.0/3.3 * 4095 ≈ 2482
+    gpio.analog_values[BATTERY_ADC_PIN] = 2482;
     TEST_ASSERT_EQUAL(0, pm->readBatteryPercent());
 }
 
 void test_battery_percent_at_mid_voltage(void) {
     pm->begin();
-    gpio.analog_values[BATTERY_ADC_PIN] = 512;
+    // 2.5V -> ADC = 2.5/3.3 * 4095 ≈ 3102
+    gpio.analog_values[BATTERY_ADC_PIN] = 3102;
     TEST_ASSERT_EQUAL(50, pm->readBatteryPercent());
 }
 
 void test_battery_percent_clamps_to_range(void) {
     pm->begin();
-    gpio.analog_values[BATTERY_ADC_PIN] = -100;
+    gpio.analog_values[BATTERY_ADC_PIN] = 0;
     TEST_ASSERT_EQUAL(0, pm->readBatteryPercent());
-    gpio.analog_values[BATTERY_ADC_PIN] = 10000;
+    gpio.analog_values[BATTERY_ADC_PIN] = 4095;
     TEST_ASSERT_EQUAL(100, pm->readBatteryPercent());
 }
 

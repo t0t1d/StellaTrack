@@ -1,24 +1,343 @@
 #ifdef STELLA_TARGET
 
-#include "firmware_controller.h"
-#include "hal/arduino_gpio_hal.h"
-#include "hal/arduino_ble_hal.h"
-#include "hal/stella_uwb_hal.h"
-#include "hal/sc7a20_accel_hal.h"
+#include <ArduinoBLE.h>
+#include <StellaUWB.h>
 
-static ArduinoGpioHal s_gpio;
-static ArduinoBleHal s_ble;
-static StellaUwbHal s_uwb;
-static Sc7a20AccelHal s_accel;
-static FirmwareController fw(&s_gpio, &s_ble, &s_uwb, &s_accel);
+// ============================================================
+// DIAG_NEARBY_ONLY: UWB diagnosis build
+// Build with: pio run -e stella-diag
+// Initializes UWB in setup() with retries, not in BLE callback
+// ============================================================
+#ifdef DIAG_NEARBY_ONLY
+
+static uint16_t numConnected = 0;
+static bool uwb_ready = false;
+
+static void rangingHandler(UWBRangingData& rangingData) {
+    if (rangingData.measureType() !=
+        static_cast<uint8_t>(uwb::MeasurementType::TWO_WAY))
+        return;
+    RangingMeasures twr = rangingData.twoWayRangingMeasure();
+    for (int j = 0; j < rangingData.available(); j++) {
+        if (twr[j].status == 0 && twr[j].distance != 0xFFFF) {
+            Serial.print("Distance: ");
+            Serial.println(twr[j].distance);
+        }
+    }
+}
+
+static void clientConnected(BLEDevice dev) {
+    Serial.print("[DIAG] BLE connected: ");
+    Serial.println(dev.address());
+    Serial.print("[DIAG] UWB ready: ");
+    Serial.println(uwb_ready ? "YES" : "NO");
+    numConnected++;
+}
+
+static void clientDisconnected(BLEDevice dev) {
+    Serial.print("[DIAG] BLE disconnected: ");
+    Serial.println(dev.address());
+    if (numConnected > 0) numConnected--;
+}
+
+static void sessionStarted(BLEDevice) {
+    Serial.println("[DIAG] UWB session STARTED");
+}
+
+static void sessionStopped(BLEDevice) {
+    Serial.println("[DIAG] UWB session STOPPED");
+}
+
+static bool tryUwbInit() {
+    Serial.println("[DIAG] Calling UWB.begin()...");
+    UWB.begin();
+    uint8_t st = UWB.state();
+    Serial.print("[DIAG] UWB.state() = ");
+    Serial.println(st);
+    return (st == 0);
+}
 
 void setup() {
-    ArduinoBleHal::instance_ = &s_ble;
-    fw.begin();
+    Serial.begin(115200);
+    unsigned long t0 = millis();
+    while (!Serial && (millis() - t0 < 3000)) delay(10);
+
+    Serial.println("=== DIAG: UWB early-init with retries ===");
+
+    UWB.registerRangingCallback(rangingHandler);
+    UWBNearbySessionManager.onConnect(clientConnected);
+    UWBNearbySessionManager.onDisconnect(clientDisconnected);
+    UWBNearbySessionManager.onSessionStart(sessionStarted);
+    UWBNearbySessionManager.onSessionStop(sessionStopped);
+
+    UWBNearbySessionManager.begin("TS_DCU040");
+
+    // Try UWB init in setup with retries (not in BLE callback)
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        Serial.print("[DIAG] UWB init attempt ");
+        Serial.print(attempt);
+        Serial.println("/3");
+        if (tryUwbInit()) {
+            uwb_ready = true;
+            Serial.println("[DIAG] UWB initialized OK!");
+            break;
+        }
+        Serial.println("[DIAG] UWB init FAILED, retrying after 2s...");
+        UWB.end();
+        delay(2000);
+    }
+
+    if (!uwb_ready) {
+        Serial.println("[DIAG] === UWB INIT FAILED after 3 attempts ===");
+        Serial.println("[DIAG] Possible causes:");
+        Serial.println("[DIAG]   1. NXP SR040 chip not responding (HW issue)");
+        Serial.println("[DIAG]   2. SPI bus misconfiguration");
+        Serial.println("[DIAG]   3. UWB chip needs firmware update");
+        Serial.println("[DIAG] BLE will still advertise but ranging won't work");
+    }
+
+    Serial.println("[DIAG] BLE advertising as TS_DCU040");
+    Serial.println("[DIAG] Ready.");
 }
 
 void loop() {
-    fw.update();
+    delay(100);
+    UWBNearbySessionManager.poll();
 }
 
+#else
+// ============================================================
+// Normal firmware
+// ============================================================
+
+#include "config.h"
+#include "commands.h"
+#include "power_manager.h"
+#include "button_handler.h"
+#include "bonding_manager.h"
+#include "hal/arduino_gpio_hal.h"
+#include "hal/sc7a20_accel_hal.h"
+
+static ArduinoGpioHal s_gpio;
+static Sc7a20AccelHal s_accel;
+
+static CommandHandler s_commands(&s_gpio);
+static PowerManager   s_power(&s_accel, &s_gpio);
+static ButtonHandler  s_button(&s_gpio);
+static BondingManager s_bonding;
+
+static BLEService        appService(SERVICE_UUID);
+static BLECharacteristic batteryChar(CHAR_BATTERY_UUID,
+                                     BLERead | BLENotify, 1);
+static BLECharacteristic commandChar(CHAR_COMMAND_UUID,
+                                     BLEWrite, 2);
+static BLECharacteristic deviceInfoChar(CHAR_DEVICE_INFO_UUID,
+                                        BLERead, 64);
+
+static uint16_t      numConnected     = 0;
+static bool          ranging_active   = false;
+static bool          uwb_ready        = false;
+static unsigned long pairing_blink_ms = 0;
+static bool          pairing_led_state = false;
+
+static void rangingHandler(UWBRangingData& rangingData) {
+    if (rangingData.measureType() !=
+        static_cast<uint8_t>(uwb::MeasurementType::TWO_WAY))
+        return;
+
+    RangingMeasures twr = rangingData.twoWayRangingMeasure();
+    for (int j = 0; j < rangingData.available(); j++) {
+        if (twr[j].status == 0 && twr[j].distance != 0xFFFF) {
+            Serial.print("Distance: ");
+            Serial.println(twr[j].distance);
+        }
+    }
+}
+
+static void clientConnected(BLEDevice dev) {
+    Serial.print("[Stella] BLE client connected: ");
+    Serial.println(dev.address());
+    Serial.print("[Stella] UWB ready: ");
+    Serial.println(uwb_ready ? "YES" : "NO");
+    numConnected++;
+    s_power.notifyConnected();
+}
+
+static void clientDisconnected(BLEDevice dev) {
+    Serial.print("[Stella] BLE client disconnected: ");
+    Serial.println(dev.address());
+    if (numConnected > 0) numConnected--;
+    s_power.notifyDisconnected();
+    ranging_active = false;
+}
+
+static void sessionStarted(BLEDevice) {
+    Serial.println("[Stella] UWB session started");
+    ranging_active = true;
+}
+static void sessionStopped(BLEDevice) {
+    Serial.println("[Stella] UWB session stopped");
+    ranging_active = false;
+}
+
+static void onCommandWritten(BLEDevice, BLECharacteristic characteristic) {
+    const uint8_t* data = characteristic.value();
+    int len = characteristic.valueLength();
+    if (len < 1) return;
+
+    uint8_t code  = data[0];
+    uint8_t param = (len >= 2) ? data[1] : 0;
+
+    if (code == CMD_PING) {
+        int pct = s_power.readBatteryPercent();
+        if (pct < 0)   pct = 0;
+        if (pct > 100) pct = 100;
+        uint8_t val = static_cast<uint8_t>(pct);
+        batteryChar.writeValue(&val, 1);
+        return;
+    }
+
+    s_commands.handleCommand(code, param);
+}
+
+static void onButtonShort(void*) {
+    if (s_bonding.isPairingMode()) {
+        s_bonding.confirmPairing();
+        if (!s_bonding.isPairingMode()) {
+            pairing_led_state = false;
+            s_gpio.digitalWrite(PIN_LED_USER, 0);
+        }
+        return;
+    }
+    s_commands.handleCommand(CMD_PLAY_SOUND, 0);
+}
+
+static void onButtonLong(void*) {
+    s_bonding.enterPairingMode();
+    pairing_blink_ms  = s_gpio.millis();
+    pairing_led_state = true;
+    s_gpio.digitalWrite(PIN_LED_USER, 1);
+}
+
+void setup() {
+    Serial.begin(115200);
+    unsigned long t0 = millis();
+    while (!Serial && (millis() - t0 < 5000)) delay(10);
+
+    Serial.println("[Stella] Firmware starting...");
+    Serial.print("[Stella] FW=");
+    Serial.print(FW_VERSION);
+    Serial.print(" HW=");
+    Serial.println(HW_MODEL);
+
+    UWB.registerRangingCallback(rangingHandler);
+
+    UWBNearbySessionManager.onConnect(clientConnected);
+    UWBNearbySessionManager.onDisconnect(clientDisconnected);
+    UWBNearbySessionManager.onSessionStart(sessionStarted);
+    UWBNearbySessionManager.onSessionStop(sessionStopped);
+
+    Serial.println("[Stella] Starting BLE...");
+    UWBNearbySessionManager.begin(BLE_DEVICE_NAME);
+    Serial.println("[Stella] BLE OK");
+
+    // UWB early init with retries (must happen before BLE connection)
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        Serial.print("[Stella] UWB init attempt ");
+        Serial.print(attempt);
+        Serial.println("/3...");
+        UWB.begin();
+        uint8_t st = UWB.state();
+        Serial.print("[Stella] UWB.state() = ");
+        Serial.println(st);
+        if (st == 0) {
+            uwb_ready = true;
+            Serial.println("[Stella] UWB ready");
+            break;
+        }
+        Serial.println("[Stella] UWB init failed, retrying...");
+        UWB.end();
+        delay(2000);
+    }
+    if (!uwb_ready) {
+        Serial.println("[Stella] WARNING: UWB unavailable after 3 attempts");
+    }
+
+    appService.addCharacteristic(batteryChar);
+    appService.addCharacteristic(commandChar);
+    appService.addCharacteristic(deviceInfoChar);
+    BLE.addService(appService);
+
+    BLEAdvertisingData scanResponse;
+    scanResponse.setLocalName(BLE_DEVICE_NAME);
+    scanResponse.setAdvertisedService(appService);
+    BLE.setScanResponseData(scanResponse);
+
+    char info[64];
+    snprintf(info, sizeof(info),
+             "{\"fw\":\"%s\",\"hw\":\"%s\"}", FW_VERSION, HW_MODEL);
+    deviceInfoChar.writeValue(
+        reinterpret_cast<const uint8_t*>(info),
+        static_cast<int>(strlen(info)));
+
+    commandChar.setEventHandler(BLEWritten, onCommandWritten);
+
+    // Initialize GPIO peripherals AFTER UWB.
+    // Do NOT call s_power.begin() -- it calls Wire.begin() which shares
+    // a hardware instance (TWIM0/SPIM0) with the UWB SPI on nRF52840,
+    // causing SPI write failures during the NI handshake.
+    // Battery reading (analogRead) works without begin().
+    // Accelerometer (motion detection) is disabled until I2C conflict is resolved.
+    s_commands.begin();
+    s_button.begin();
+    s_button.setOnShortPress(onButtonShort, nullptr);
+    s_button.setOnLongPress(onButtonLong, nullptr);
+    s_bonding.begin();
+
+    Serial.print("[Stella] Name: ");
+    Serial.println(BLE_DEVICE_NAME);
+    Serial.print("[Stella] App svc: ");
+    Serial.println(SERVICE_UUID);
+    Serial.println("[Stella] Ready.");
+}
+
+static unsigned long last_heartbeat_ms = 0;
+
+void loop() {
+    delay(100);
+    UWBNearbySessionManager.poll();
+
+    s_button.update();
+    s_commands.update();
+
+    unsigned long now = millis();
+    if (now - last_heartbeat_ms >= 5000) {
+        last_heartbeat_ms = now;
+        Serial.print("[Stella] alive t=");
+        Serial.print(now / 1000);
+        Serial.print("s conns=");
+        Serial.print(numConnected);
+        Serial.print(" ranging=");
+        Serial.println(ranging_active ? "yes" : "no");
+    }
+
+    if (numConnected > 0 && s_power.shouldReportBattery()) {
+        int pct = s_power.readBatteryPercent();
+        if (pct < 0)   pct = 0;
+        if (pct > 100) pct = 100;
+        uint8_t val = static_cast<uint8_t>(pct);
+        batteryChar.writeValue(&val, 1);
+    }
+
+    if (s_bonding.isPairingMode()) {
+        unsigned long now_p = s_gpio.millis();
+        if (now_p - pairing_blink_ms >= 500) {
+            pairing_led_state = !pairing_led_state;
+            s_gpio.digitalWrite(PIN_LED_USER, pairing_led_state ? 1 : 0);
+            pairing_blink_ms = now_p;
+        }
+    }
+}
+
+#endif // DIAG_NEARBY_ONLY
 #endif // STELLA_TARGET
