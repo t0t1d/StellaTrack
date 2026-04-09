@@ -1,5 +1,7 @@
 import SwiftUI
+import Combine
 import CoreLocation
+private var uiLog: BLEDebugLog { BLEDebugLog.shared }
 
 struct StellaScanOverlay: View {
     @ObservedObject var deviceManager: DeviceManager
@@ -9,8 +11,11 @@ struct StellaScanOverlay: View {
     let onAddMock: () -> Void
 
     @StateObject private var scanner = StellaScanner()
-    @StateObject private var pairingManager = StellaPairingManager()
+    @StateObject private var pairingBridge = PairingBridge()
     @State private var pairingTarget: DiscoveredStella?
+
+    private var pairingManager: StellaPairingManager? { pairingBridge.manager }
+    private var currentPairingState: PairingState { pairingBridge.state }
 
     var body: some View {
         ZStack {
@@ -47,10 +52,13 @@ struct StellaScanOverlay: View {
         .environment(\.colorScheme, .dark)
         .onAppear { scanner.startScan() }
         .onDisappear { scanner.stopScan() }
-        .onChange(of: pairingManager.pairingState) { _, newState in
-            guard newState == .paired, let stella = pairingTarget else { return }
-            deviceManager.addStellaDevice(name: stella.name)
-            pairingManager.reset()
+        .onChange(of: pairingBridge.state) { _, newState in
+            guard newState == .paired,
+                  let stella = pairingTarget,
+                  let provider = pairingBridge.manager?.pairedProvider
+            else { return }
+            deviceManager.addStellaDevice(name: stella.name, provider: provider)
+            pairingBridge.detach()
             pairingTarget = nil
             onDismiss()
         }
@@ -105,6 +113,15 @@ struct StellaScanOverlay: View {
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.5))
             }
+        case .waitingForBluetooth:
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                Text("Bluetooth Off")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
         case .idle, .stopped:
             Text("Ready")
                 .font(.caption)
@@ -116,7 +133,7 @@ struct StellaScanOverlay: View {
 
     private var deviceList: some View {
         LazyVStack(spacing: 0) {
-            if scanner.discoveredDevices.isEmpty && scanner.scanningState == .scanning && pairingTarget == nil {
+            if unpairedDevices.isEmpty && scanner.scanningState == .scanning && pairingTarget == nil {
                 VStack(spacing: 8) {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .font(.system(size: 28))
@@ -130,7 +147,7 @@ struct StellaScanOverlay: View {
                 .padding(.vertical, 28)
             }
 
-            ForEach(scanner.discoveredDevices) { stella in
+            ForEach(unpairedDevices) { stella in
                 stellaRow(stella)
             }
 
@@ -143,9 +160,7 @@ struct StellaScanOverlay: View {
         let variableValue = Double(bars) / 3.0
 
         return Button {
-            pairingTarget = stella
-            pairingManager.reset()
-            pairingManager.pair(stella: stella)
+            startPairing(stella)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "wifi", variableValue: variableValue)
@@ -202,12 +217,34 @@ struct StellaScanOverlay: View {
         .buttonStyle(.plain)
     }
 
+    private var unpairedDevices: [DiscoveredStella] {
+        let pairedIDs = Set(
+            deviceManager.devices
+                .compactMap { ($0.provider as? StellaDistanceProvider)?.peripheralIdentifier }
+        )
+        return scanner.discoveredDevices.filter {
+            !pairedIDs.contains($0.peripheralIdentifier) &&
+            $0.id != pairingTarget?.id
+        }
+    }
+
+    // MARK: - Pairing
+
+    private func startPairing(_ stella: DiscoveredStella) {
+        pairingTarget = stella
+        let pm = StellaPairingManager(centralManager: scanner.central)
+        scanner.connectionDelegate = pm
+        pairingBridge.attach(pm)
+        uiLog.log("startPairing — central=\(String(describing: type(of: scanner.central))), delegate set=\(scanner.connectionDelegate != nil)")
+        pm.pair(stella: stella)
+    }
+
     // MARK: - Pairing card
 
     private func pairingCard(for stella: DiscoveredStella) -> some View {
         HStack(spacing: 10) {
             Group {
-                switch pairingManager.pairingState {
+                switch currentPairingState {
                 case .idle:
                     Image(systemName: "link").foregroundStyle(.white.opacity(0.6))
                 case .connecting, .configuringUWB:
@@ -229,10 +266,9 @@ struct StellaScanOverlay: View {
 
             Spacer()
 
-            if case .failed = pairingManager.pairingState {
+            if case .failed = currentPairingState {
                 Button("Retry") {
-                    pairingManager.reset()
-                    pairingManager.pair(stella: stella)
+                    startPairing(stella)
                 }
                 .font(.caption.bold())
                 .foregroundStyle(.blue)
@@ -244,7 +280,7 @@ struct StellaScanOverlay: View {
 
     @ViewBuilder
     private var pairingStateText: some View {
-        switch pairingManager.pairingState {
+        switch currentPairingState {
         case .idle:
             Text("Ready").font(.caption).foregroundStyle(.white.opacity(0.4))
         case .connecting:
@@ -262,5 +298,32 @@ struct StellaScanOverlay: View {
         if rssi > -50 { return 3 }
         if rssi > -65 { return 2 }
         return 1
+    }
+}
+
+// MARK: - PairingBridge
+
+@MainActor
+final class PairingBridge: ObservableObject {
+    @Published private(set) var state: PairingState = .idle
+    private(set) var manager: StellaPairingManager?
+    private var cancellable: AnyCancellable?
+
+    func attach(_ pm: StellaPairingManager) {
+        manager?.reset()
+        manager = pm
+        state = pm.pairingState
+        cancellable = pm.$pairingState
+            .receive(on: RunLoop.main)
+            .sink { [weak self] newState in
+                self?.state = newState
+            }
+    }
+
+    func detach() {
+        manager?.reset()
+        manager = nil
+        cancellable = nil
+        state = .idle
     }
 }

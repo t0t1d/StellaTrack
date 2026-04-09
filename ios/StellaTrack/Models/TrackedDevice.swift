@@ -47,6 +47,7 @@ class TrackedDevice: ObservableObject, Identifiable {
     @Published var icon: String
     let isMock: Bool
 
+    @Published var connectionStatus: ConnectionStatus = .disconnected
     @Published var batteryLevel: Double?
     @Published var lastSeen: Date?
     @Published var mockCoordinate: CLLocationCoordinate2D?
@@ -84,6 +85,13 @@ class TrackedDevice: ObservableObject, Identifiable {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] level in
                 self?.batteryLevel = level
+            }
+            .store(in: &cancellables)
+
+        provider.connectionStatusPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                self?.connectionStatus = status
             }
             .store(in: &cancellables)
     }

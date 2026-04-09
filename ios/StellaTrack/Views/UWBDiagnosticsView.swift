@@ -2,11 +2,22 @@ import SwiftUI
 import NearbyInteraction
 
 struct UWBDiagnosticsView: View {
+    @EnvironmentObject private var deviceManager: DeviceManager
+    @ObservedObject private var bleDebugLog = BLEDebugLog.shared
     @State private var results: [DiagnosticItem] = []
     @State private var isLoading = true
+    @State private var showResetConfirmation = false
+    @State private var didReset = false
+    @State private var showBLELog = false
 
     var body: some View {
         List {
+            Section {
+                NavigationLink("BLE Debug Log (\(bleDebugLog.entries.count))", isActive: $showBLELog) {
+                    BLELogView()
+                }
+            }
+
             Section("Device") {
                 DiagnosticRow(label: "Model", value: deviceModel)
                 DiagnosticRow(label: "iOS Version", value: UIDevice.current.systemVersion)
@@ -73,6 +84,21 @@ struct UWBDiagnosticsView: View {
                 let caps = NISession.deviceCapabilities
                 DiagnosticRow(label: "Capabilities Type", value: String(describing: type(of: caps)))
             }
+
+            Section {
+                Button(role: .destructive) {
+                    showResetConfirmation = true
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.counterclockwise.circle.fill")
+                        Text("Hard Reset App")
+                    }
+                }
+            } header: {
+                Text("Danger Zone")
+            } footer: {
+                Text("Removes all devices, alert settings, and saved configuration. This cannot be undone.")
+            }
         }
         .navigationTitle("UWB Diagnostics")
         .onAppear { runDiagnostics() }
@@ -86,6 +112,20 @@ struct UWBDiagnosticsView: View {
                     Image(systemName: "arrow.clockwise")
                 }
             }
+        }
+        .alert("Hard Reset", isPresented: $showResetConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reset Everything", role: .destructive) {
+                deviceManager.resetAll()
+                didReset = true
+            }
+        } message: {
+            Text("This will remove all devices, alert settings, and saved data. You will need to re-pair all devices.")
+        }
+        .alert("Reset Complete", isPresented: $didReset) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("All app data has been cleared.")
         }
     }
 

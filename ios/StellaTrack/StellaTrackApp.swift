@@ -1,9 +1,20 @@
 import SwiftUI
+import CoreBluetooth
 
 @main
 struct StellaTrackApp: App {
-    @StateObject private var deviceManager = DeviceManager()
+    @StateObject private var deviceManager: DeviceManager
     @StateObject private var notificationService = NotificationService()
+
+    init() {
+        let isTestEnvironment = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        if isTestEnvironment {
+            _deviceManager = StateObject(wrappedValue: DeviceManager())
+        } else {
+            let central = CBCentralManager(delegate: nil, queue: nil)
+            _deviceManager = StateObject(wrappedValue: DeviceManager(centralManager: central))
+        }
+    }
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {

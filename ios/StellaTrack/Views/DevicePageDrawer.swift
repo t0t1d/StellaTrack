@@ -123,6 +123,12 @@ struct DevicePageDrawer: View {
                     Text("\(Int(elapsed / 3600)) hr ago")
                         .foregroundStyle(.red)
                 }
+            } else if device.connectionStatus == .ranging || device.connectionStatus == .connected {
+                Text("Connected (BLE only)")
+                    .foregroundStyle(.blue)
+            } else if device.connectionStatus == .searching {
+                Text("Reconnecting...")
+                    .foregroundStyle(.orange)
             } else {
                 Text("No signal")
                     .foregroundStyle(.secondary)
@@ -242,9 +248,15 @@ struct DevicePageDrawer: View {
                     }
                 Text(soundPlaying ? "Stop" : "Play Sound")
                     .font(.caption)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(isPlaySoundEnabled ? .primary : .secondary)
             }
         }
+        .disabled(!isPlaySoundEnabled)
+        .opacity(isPlaySoundEnabled ? 1.0 : 0.5)
+    }
+
+    private var isPlaySoundEnabled: Bool {
+        device.isMock || device.connectionStatus == .connected || device.connectionStatus == .ranging
     }
 
     private var trackCard: some View {

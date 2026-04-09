@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CoreBluetooth
 import CoreLocation
 import simd
 
@@ -8,10 +9,12 @@ class DeviceManager: ObservableObject {
     @Published private(set) var devices: [TrackedDevice] = []
 
     let persistenceService = PersistenceService()
+    private(set) var centralManager: CentralManaging?
     private var saveCancellable: AnyCancellable?
     private var deviceObservers = Set<AnyCancellable>()
 
-    init() {
+    init(centralManager: CentralManaging? = nil) {
+        self.centralManager = centralManager
         restoreDevices()
     }
 
@@ -46,6 +49,17 @@ class DeviceManager: ObservableObject {
     }
 
     @discardableResult
+    func addStellaDevice(
+        name: String,
+        provider: StellaDistanceProvider,
+        settings: AlertSettings = .default,
+        id: UUID = UUID(),
+        icon: String? = nil
+    ) -> TrackedDevice {
+        return addDevice(name: name, provider: provider, settings: settings, id: id, icon: icon, isMock: false)
+    }
+
+    @discardableResult
     func addStellaDevice(name: String, settings: AlertSettings = .default, id: UUID = UUID(), icon: String? = nil) -> TrackedDevice {
         let provider = StubDistanceProvider()
         let device = addDevice(name: name, provider: provider, settings: settings, id: id, icon: icon, isMock: false)
@@ -59,6 +73,21 @@ class DeviceManager: ObservableObject {
             devices.remove(at: index)
             scheduleSave()
         }
+    }
+
+    func resetAll() {
+        for device in devices {
+            device.provider.stop()
+        }
+        devices.removeAll()
+        deviceObservers.removeAll()
+        saveCancellable?.cancel()
+        saveCancellable = nil
+
+        if let bundleID = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: bundleID)
+        }
+        UserDefaults.standard.synchronize()
     }
 
     // MARK: - Persistence
@@ -84,6 +113,14 @@ class DeviceManager: ObservableObject {
                     id: record.id,
                     icon: record.icon
                 )
+            } else if let pidString = record.peripheralIdentifier,
+                      let pid = UUID(uuidString: pidString),
+                      let central = centralManager {
+                let peripheral = ReconnectPeripheral(identifier: pid, name: record.name)
+                let provider = StellaDistanceProvider(peripheral: peripheral, centralManager: central)
+                let device = addDevice(name: record.name, provider: provider, settings: settings, id: record.id, icon: record.icon, isMock: false)
+                provider.start()
+                _ = device
             } else {
                 let provider = StubDistanceProvider()
                 let device = addDevice(name: record.name, provider: provider, settings: settings, id: record.id, icon: record.icon, isMock: false)
@@ -104,7 +141,8 @@ class DeviceManager: ObservableObject {
 
     func saveNow() {
         let records: [DeviceRecord] = devices.map { device in
-            DeviceRecord(
+            let peripheralID = (device.provider as? StellaDistanceProvider)?.peripheralIdentifier.uuidString
+            return DeviceRecord(
                 id: device.id,
                 name: device.name,
                 icon: device.icon,
@@ -114,7 +152,8 @@ class DeviceManager: ObservableObject {
                 alertDuration: device.alertEngine.settings.alertDuration.isInfinite ? nil : device.alertEngine.settings.alertDuration,
                 isMock: device.isMock,
                 mockLatitude: device.mockCoordinate?.latitude,
-                mockLongitude: device.mockCoordinate?.longitude
+                mockLongitude: device.mockCoordinate?.longitude,
+                peripheralIdentifier: peripheralID
             )
         }
         persistenceService.save(records)
@@ -162,4 +201,22 @@ class DeviceManager: ObservableObject {
         let direction = simd_float3(Float(sin(bearing)), 0, Float(cos(bearing)))
         provider.setDistance(distance, direction: direction)
     }
+}
+
+// MARK: - Reconnect Peripheral Placeholder
+
+private final class ReconnectPeripheral: PeripheralManaging {
+    let identifier: UUID
+    let name: String?
+
+    init(identifier: UUID, name: String?) {
+        self.identifier = identifier
+        self.name = name
+    }
+
+    func discoverServices(_ serviceUUIDs: [CBUUID]?) {}
+    func discoverCharacteristics(_ characteristicUUIDs: [CBUUID]?, for serviceID: CBUUID) {}
+    func setNotifyValue(_ enabled: Bool, for characteristicID: CBUUID) {}
+    func readValue(for characteristicID: CBUUID) {}
+    func writeValue(_ data: Data, for characteristicID: CBUUID, type: CBCharacteristicWriteType) {}
 }

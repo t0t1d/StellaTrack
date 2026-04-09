@@ -6,7 +6,7 @@ import simd
 class MockDistanceProvider: DistanceProvider {
     private let distanceSubject = PassthroughSubject<DistanceReading, Never>()
     private let connectionStatusSubject = CurrentValueSubject<ConnectionStatus, Never>(.disconnected)
-    private let batteryLevelSubject = CurrentValueSubject<Double?, Never>(80)
+    private let batteryLevelSubject = CurrentValueSubject<Double?, Never>(nil)
     private(set) var playSoundCallCount = 0
 
     var distancePublisher: AnyPublisher<DistanceReading, Never> {

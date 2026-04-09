@@ -11,6 +11,7 @@ struct DeviceRecord: Codable, Identifiable {
     var isMock: Bool
     var mockLatitude: Double?
     var mockLongitude: Double?
+    var peripheralIdentifier: String?
 }
 
 @MainActor

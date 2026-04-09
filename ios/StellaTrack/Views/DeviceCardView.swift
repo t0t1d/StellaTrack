@@ -13,12 +13,25 @@ struct DeviceCardView: View {
     }
 
     private var statusText: String {
-        switch device.provider.currentConnectionStatus {
+        switch device.connectionStatus {
         case .disconnected: return "Disconnected"
         case .searching: return "Searching..."
         case .connected: return "Connected"
         case .ranging:
-            return String(format: "%.1f m away", device.alertEngine.latestDistance)
+            if device.lastSeen != nil {
+                return String(format: "%.1f m away", device.alertEngine.latestDistance)
+            }
+            return "Connected (BLE)"
+        }
+    }
+
+    private var connectionIcon: (name: String, color: Color)? {
+        guard !device.isMock else { return nil }
+        switch device.connectionStatus {
+        case .disconnected: return ("bolt.slash.fill", .red)
+        case .searching: return ("antenna.radiowaves.left.and.right", .orange)
+        case .connected: return ("link", .blue)
+        case .ranging: return ("dot.radiowaves.right", .green)
         }
     }
 
@@ -44,9 +57,16 @@ struct DeviceCardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(device.name)
                     .font(.headline)
-                Text(statusText)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                HStack(spacing: 4) {
+                    if let icon = connectionIcon {
+                        Image(systemName: icon.name)
+                            .font(.caption)
+                            .foregroundStyle(icon.color)
+                    }
+                    Text(statusText)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
             }
 
             Spacer()

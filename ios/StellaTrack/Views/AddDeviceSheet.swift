@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import CoreLocation
 
 struct AddDeviceSheet: View {
@@ -7,9 +8,11 @@ struct AddDeviceSheet: View {
     @Binding var isPresented: Bool
 
     @StateObject private var scanner = StellaScanner()
-    @StateObject private var pairingManager = StellaPairingManager()
-
+    @StateObject private var pairingBridge = PairingBridge()
     @State private var pairingTarget: DiscoveredStella?
+
+    private var pairingManager: StellaPairingManager? { pairingBridge.manager }
+    private var currentPairingState: PairingState { pairingBridge.state }
 
     var body: some View {
         NavigationStack {
@@ -39,10 +42,13 @@ struct AddDeviceSheet: View {
             .onDisappear {
                 scanner.stopScan()
             }
-            .onChange(of: pairingManager.pairingState) { _, newState in
-                guard newState == .paired, let stella = pairingTarget else { return }
-                deviceManager.addStellaDevice(name: stella.name)
-                pairingManager.reset()
+            .onChange(of: pairingBridge.state) { _, newState in
+                guard newState == .paired,
+                      let stella = pairingTarget,
+                      let provider = pairingBridge.manager?.pairedProvider
+                else { return }
+                deviceManager.addStellaDevice(name: stella.name, provider: provider)
+                pairingBridge.detach()
                 pairingTarget = nil
                 isPresented = false
             }
@@ -62,7 +68,7 @@ struct AddDeviceSheet: View {
                 pairingProgressCard(for: target)
             }
 
-            if scanner.discoveredDevices.isEmpty && scanner.scanningState == .scanning && pairingTarget == nil {
+            if unpairedDevices.isEmpty && scanner.scanningState == .scanning && pairingTarget == nil {
                 ContentUnavailableView(
                     "Scanning…",
                     systemImage: "antenna.radiowaves.left.and.right",
@@ -71,7 +77,7 @@ struct AddDeviceSheet: View {
                 .frame(maxHeight: 220)
             } else {
                 List {
-                    ForEach(scanner.discoveredDevices) { stella in
+                    ForEach(unpairedDevices) { stella in
                         discoveredRow(stella)
                             .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                             .listRowSeparator(.visible)
@@ -94,6 +100,10 @@ struct AddDeviceSheet: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+        case .waitingForBluetooth:
+            Label("Bluetooth Off", systemImage: "exclamationmark.triangle")
+                .font(.subheadline)
+                .foregroundStyle(.orange)
         case .idle, .stopped:
             Label("Ready", systemImage: "checkmark.circle")
                 .font(.subheadline)
@@ -107,14 +117,31 @@ struct AddDeviceSheet: View {
         return 1
     }
 
+    private var unpairedDevices: [DiscoveredStella] {
+        let pairedIDs = Set(
+            deviceManager.devices
+                .compactMap { ($0.provider as? StellaDistanceProvider)?.peripheralIdentifier }
+        )
+        return scanner.discoveredDevices.filter {
+            !pairedIDs.contains($0.peripheralIdentifier) &&
+            $0.id != pairingTarget?.id
+        }
+    }
+
+    private func startPairing(_ stella: DiscoveredStella) {
+        pairingTarget = stella
+        let pm = StellaPairingManager(centralManager: scanner.central)
+        scanner.connectionDelegate = pm
+        pairingBridge.attach(pm)
+        pm.pair(stella: stella)
+    }
+
     private func discoveredRow(_ stella: DiscoveredStella) -> some View {
         let bars = rssiBars(for: stella.rssi)
         let variableValue = Double(bars) / 3.0
 
         return Button {
-            pairingTarget = stella
-            pairingManager.reset()
-            pairingManager.pair(stella: stella)
+            startPairing(stella)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "wifi", variableValue: variableValue)
@@ -147,7 +174,7 @@ struct AddDeviceSheet: View {
                 .font(.subheadline.weight(.semibold))
 
             Group {
-                switch pairingManager.pairingState {
+                switch currentPairingState {
                 case .idle:
                     Text("Tap a device to pair.")
                 case .connecting:
@@ -165,10 +192,9 @@ struct AddDeviceSheet: View {
             .font(.subheadline)
             .foregroundStyle(.secondary)
 
-            if case .failed = pairingManager.pairingState {
+            if case .failed = currentPairingState {
                 Button("Try Again") {
-                    pairingManager.reset()
-                    pairingManager.pair(stella: stella)
+                    startPairing(stella)
                 }
             }
         }

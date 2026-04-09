@@ -10,6 +10,7 @@ docs/
 
 # Build products
 build/
+build_device/
 DerivedData/
 
 # macOS
