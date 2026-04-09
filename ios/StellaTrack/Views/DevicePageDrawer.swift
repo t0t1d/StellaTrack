@@ -94,7 +94,7 @@ struct DevicePageDrawer: View {
     private var distanceSection: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(String(format: "%.0f", alertEngine.latestDistance))
+                Text(String(format: "%.1f", alertEngine.latestDistance))
                     .font(.system(size: 48, weight: .bold, design: .rounded))
                     .lineLimit(1)
                 Text("m")

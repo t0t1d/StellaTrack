@@ -5,7 +5,7 @@ import CoreLocation
 import simd
 
 @MainActor
-class DeviceManager: ObservableObject {
+class DeviceManager: NSObject, ObservableObject {
     @Published private(set) var devices: [TrackedDevice] = []
 
     let persistenceService = PersistenceService()
@@ -15,6 +15,10 @@ class DeviceManager: ObservableObject {
 
     init(centralManager: CentralManaging? = nil) {
         self.centralManager = centralManager
+        super.init()
+        if let cbCentral = centralManager as? CBCentralManager {
+            cbCentral.delegate = self
+        }
         restoreDevices()
     }
 
@@ -200,6 +204,45 @@ class DeviceManager: ObservableObject {
         let bearing = atan2(y, x)
         let direction = simd_float3(Float(sin(bearing)), 0, Float(cos(bearing)))
         provider.setDistance(distance, direction: direction)
+    }
+
+    // MARK: - Stella Provider Lookup
+
+    func stellaProvider(for peripheralIdentifier: UUID) -> StellaDistanceProvider? {
+        devices.lazy
+            .compactMap { $0.provider as? StellaDistanceProvider }
+            .first { $0.peripheralIdentifier == peripheralIdentifier }
+    }
+}
+
+// MARK: - CBCentralManagerDelegate (reconnect support)
+
+extension DeviceManager: CBCentralManagerDelegate {
+    nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        // Required delegate method; no action needed — providers handle connection via connectPeripheral.
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        Task { @MainActor in
+            guard let provider = stellaProvider(for: peripheral.identifier) else { return }
+            let wrapper = CBPeripheralWrapper(peripheral)
+            provider.replacePeripheral(wrapper)
+            provider.handleDidConnect()
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        Task { @MainActor in
+            guard let provider = stellaProvider(for: peripheral.identifier) else { return }
+            provider.handleDidFailToConnect(error: error)
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        Task { @MainActor in
+            guard let provider = stellaProvider(for: peripheral.identifier) else { return }
+            provider.handleDidDisconnect(error: error)
+        }
     }
 }
 

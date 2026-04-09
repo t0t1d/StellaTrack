@@ -52,7 +52,7 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
     // MARK: - BLE References
 
     let peripheralIdentifier: UUID
-    private let peripheral: PeripheralManaging
+    private var peripheral: PeripheralManaging
     private let centralManager: CentralManaging
 
     private var commandCharID: CBUUID?
@@ -125,6 +125,12 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
         writeCommand(.stopSound)
     }
 
+    // MARK: - Peripheral Swap (for reconnect after app restart)
+
+    func replacePeripheral(_ newPeripheral: PeripheralManaging) {
+        peripheral = newPeripheral
+    }
+
     // MARK: - BLE State Machine Handlers
 
     func handleDidConnect() {
@@ -173,6 +179,7 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
         self.batteryCharID = batteryCharID
 
         if let batteryCharID {
+            peripheral.setNotifyValue(true, for: batteryCharID)
             peripheral.readValue(for: batteryCharID)
             startBatteryPolling()
         }
@@ -503,8 +510,10 @@ extension StellaDistanceProvider: CBPeripheralDelegate {
 
             case StellaConstants.batteryLevelUUID:
                 if let byte = value.first {
-                    bleLog.log("Battery raw: \(byte)")
+                    bleLog.log("Battery raw: \(byte)", level: .success)
                     handleBatteryUpdate(level: Double(byte))
+                } else {
+                    bleLog.log("Battery characteristic returned empty data", level: .warning)
                 }
 
             default:
