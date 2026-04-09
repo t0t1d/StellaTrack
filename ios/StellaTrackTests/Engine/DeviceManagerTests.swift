@@ -130,4 +130,21 @@ final class DeviceManagerTests: XCTestCase {
         XCTAssertTrue(restoredManager.devices.first?.provider is StellaDistanceProvider)
         XCTAssertTrue(mockCentral.connectCalled)
     }
+
+    func testStellaProviderLookupFindsMatchingDevice() {
+        let peripheralID = UUID()
+        let mockPeripheral = MockPeripheral(identifier: peripheralID, name: "Stella-Lookup")
+        let mockCentral = MockCentralManager()
+        let provider = StellaDistanceProvider(peripheral: mockPeripheral, centralManager: mockCentral)
+
+        manager.addStellaDevice(name: "Stella-Lookup", provider: provider)
+
+        let found = manager.stellaProvider(for: peripheralID)
+        XCTAssertNotNil(found)
+        XCTAssertEqual(found?.peripheralIdentifier, peripheralID)
+    }
+
+    func testStellaProviderLookupReturnsNilForUnknownID() {
+        XCTAssertNil(manager.stellaProvider(for: UUID()))
+    }
 }

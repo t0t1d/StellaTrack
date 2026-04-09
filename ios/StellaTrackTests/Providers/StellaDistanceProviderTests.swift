@@ -173,6 +173,25 @@ final class StellaDistanceProviderTests: XCTestCase {
         XCTAssertEqual(receivedBattery, 85)
     }
 
+    func testBatteryCharDiscoverySubscribesAndReads() {
+        provider.start()
+        provider.handleDidConnect()
+
+        provider.handleCustomCharacteristicsDiscovered(
+            commandCharID: StellaConstants.commandUUID,
+            batteryCharID: StellaConstants.batteryLevelUUID
+        )
+
+        XCTAssertTrue(
+            mockPeripheral.notifyEnabledCharIDs.contains(StellaConstants.batteryLevelUUID),
+            "Should subscribe to battery notifications"
+        )
+        XCTAssertTrue(
+            mockPeripheral.readValueCharIDs.contains(StellaConstants.batteryLevelUUID),
+            "Should perform initial battery read"
+        )
+    }
+
     // MARK: - Distance Reading
 
     func testDistanceReadingPublishes() {
@@ -399,6 +418,18 @@ final class StellaDistanceProviderTests: XCTestCase {
         XCTAssertEqual(statuses, [.disconnected, .searching, .connected])
     }
 
+    // MARK: - Peripheral Swap
+
+    func testReplacePeripheralUsesNewPeripheral() {
+        let newPeripheral = MockPeripheral(identifier: mockPeripheral.identifier, name: "ReconnectedStella")
+        provider.replacePeripheral(newPeripheral)
+        provider.handleDidConnect()
+
+        XCTAssertTrue(newPeripheral.discoverServicesCalled, "Should discover services on the new peripheral")
+        XCTAssertTrue(newPeripheral.setDelegateCalled, "Should set delegate on the new peripheral")
+        XCTAssertFalse(mockPeripheral.discoverServicesCalled, "Should NOT use the old peripheral")
+    }
+
     // MARK: - Helpers
 
     private func simulateCharacteristicDiscovery() {
@@ -451,7 +482,11 @@ final class MockPeripheral: PeripheralManaging {
         }
     }
 
-    func readValue(for characteristicID: CBUUID) {}
+    private(set) var readValueCharIDs: [CBUUID] = []
+
+    func readValue(for characteristicID: CBUUID) {
+        readValueCharIDs.append(characteristicID)
+    }
 
     func writeValue(_ data: Data, for characteristicID: CBUUID, type: CBCharacteristicWriteType) {
         lastWrittenData = data
