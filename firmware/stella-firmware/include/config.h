@@ -17,15 +17,18 @@
 #define BLE_RECONNECT_TIMEOUT_MS 30000
 #define BLE_ADV_TIMEOUT_MS      60000
 
-// --- Pin Definitions ---
-#define PIN_BUZZER              3
+// --- Pin Definitions (Stella ABX00131) ---
+// TODO: LED pin TBD - not on any Arduino pin 0-33, needs direct nRF GPIO
+// Buzzer confirmed on pin 14 or 15 (A0/A1) via pin scanner
+// Button (KEY) = P0.23 = Arduino pin 7
+#define PIN_BUZZER              14
 #define PIN_LED_USER            13
 #define PIN_BUTTON_USER         7
 #define PIN_BUTTON_RESET        -1
 
 // --- Buzzer ---
 #define BUZZER_FREQ_HZ          4000
-#define BUZZER_DEFAULT_DURATION_S 0
+#define BUZZER_DEFAULT_DURATION_S 3
 
 // --- UWB ---
 #define UWB_RANGING_RATE_ACTIVE_HZ  10
@@ -39,10 +42,9 @@
 
 // --- Battery ---
 #define BATTERY_REPORT_INTERVAL_MS 30000
-#if defined(NATIVE_TEST) && !defined(A0)
-#define A0 14
-#endif
-#define BATTERY_ADC_PIN         A0
+#define BATTERY_ADC_PIN         14
+#define BATTERY_ADC_MAX         4095
+#define BATTERY_VREF            3.3f
 #define BATTERY_VOLTAGE_MIN     2.0f
 #define BATTERY_VOLTAGE_MAX     3.0f
 

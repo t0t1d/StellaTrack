@@ -32,14 +32,14 @@ bool BleService::begin() {
     if (!hal_->addCharacteristic(CHAR_UWB_CONFIG_IN_UUID, BLE_PROP_WRITE, UWB_CONFIG_MAX_SIZE)) return false;
 
     const uint16_t batteryProps = BLE_PROP_READ | BLE_PROP_NOTIFY;
-    if (!hal_->addCharacteristic(CHAR_BATTERY_UUID, batteryProps, 8)) return false;
+    if (!hal_->addCharacteristic(CHAR_BATTERY_UUID, batteryProps, 1)) return false;
 
-    if (!hal_->addCharacteristic(CHAR_COMMAND_UUID, BLE_PROP_WRITE, 32)) return false;
+    if (!hal_->addCharacteristic(CHAR_COMMAND_UUID, BLE_PROP_WRITE, 2)) return false;
 
-    if (!hal_->addCharacteristic(CHAR_DEVICE_INFO_UUID, BLE_PROP_READ, 128)) return false;
+    if (!hal_->addCharacteristic(CHAR_DEVICE_INFO_UUID, BLE_PROP_READ, 64)) return false;
 
-    char info[128];
-    std::snprintf(info, sizeof(info), "{\"fw_version\":\"%s\",\"hw_model\":\"%s\"}", FW_VERSION, HW_MODEL);
+    char info[64];
+    std::snprintf(info, sizeof(info), "{\"fw\":\"%s\",\"hw\":\"%s\"}", FW_VERSION, HW_MODEL);
     const size_t infoLen = std::strlen(info);
     if (!hal_->writeCharacteristic(CHAR_DEVICE_INFO_UUID, reinterpret_cast<const uint8_t*>(info), infoLen)) return false;
 

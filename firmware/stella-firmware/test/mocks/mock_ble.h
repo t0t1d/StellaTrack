@@ -98,6 +98,13 @@ public:
         if (connectCb) connectCb(connectCtx);
     }
 
+    /** Connected GATT session without bond (e.g. first-time pairing flow). */
+    void simulateConnectUnpaired() {
+        connected = true;
+        paired = false;
+        if (connectCb) connectCb(connectCtx);
+    }
+
     void simulateDisconnect() {
         connected = false;
         if (disconnectCb) disconnectCb(disconnectCtx);

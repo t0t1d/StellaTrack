@@ -93,7 +93,7 @@ void test_begin_creates_battery_read_notify(void) {
     TEST_ASSERT_TRUE(it != mock.characteristics.end());
     uint16_t want = BLE_PROP_READ | BLE_PROP_NOTIFY;
     TEST_ASSERT_EQUAL_UINT16(want, it->second.properties);
-    TEST_ASSERT_EQUAL_UINT32(8, it->second.maxLen);
+    TEST_ASSERT_EQUAL_UINT32(1, it->second.maxLen);
 }
 
 void test_begin_creates_command_write(void) {
@@ -101,7 +101,7 @@ void test_begin_creates_command_write(void) {
     auto it = mock.characteristics.find(CHAR_COMMAND_UUID);
     TEST_ASSERT_TRUE(it != mock.characteristics.end());
     TEST_ASSERT_EQUAL_UINT16(BLE_PROP_WRITE, it->second.properties);
-    TEST_ASSERT_EQUAL_UINT32(32, it->second.maxLen);
+    TEST_ASSERT_EQUAL_UINT32(2, it->second.maxLen);
 }
 
 void test_begin_creates_device_info_read(void) {
@@ -109,7 +109,7 @@ void test_begin_creates_device_info_read(void) {
     auto it = mock.characteristics.find(CHAR_DEVICE_INFO_UUID);
     TEST_ASSERT_TRUE(it != mock.characteristics.end());
     TEST_ASSERT_EQUAL_UINT16(BLE_PROP_READ, it->second.properties);
-    TEST_ASSERT_EQUAL_UINT32(128, it->second.maxLen);
+    TEST_ASSERT_EQUAL_UINT32(64, it->second.maxLen);
 }
 
 void test_begin_writes_device_info_json(void) {
@@ -118,6 +118,8 @@ void test_begin_writes_device_info_json(void) {
     TEST_ASSERT_TRUE(it != mock.characteristics.end());
     TEST_ASSERT_TRUE(it->second.data.size() > 0);
     std::string json(reinterpret_cast<const char*>(it->second.data.data()), it->second.data.size());
+    TEST_ASSERT_NOT_NULL(std::strstr(json.c_str(), "\"fw\""));
+    TEST_ASSERT_NOT_NULL(std::strstr(json.c_str(), "\"hw\""));
     TEST_ASSERT_NOT_NULL(std::strstr(json.c_str(), FW_VERSION));
     TEST_ASSERT_NOT_NULL(std::strstr(json.c_str(), HW_MODEL));
 }
@@ -203,8 +205,21 @@ void test_device_info_json_contains_fw_and_hw(void) {
     svc.begin();
     auto it = mock.characteristics.find(CHAR_DEVICE_INFO_UUID);
     std::string json(reinterpret_cast<const char*>(it->second.data.data()), it->second.data.size());
+    TEST_ASSERT_NOT_NULL(std::strstr(json.c_str(), "\"fw\""));
+    TEST_ASSERT_NOT_NULL(std::strstr(json.c_str(), "\"hw\""));
     TEST_ASSERT_NOT_NULL(std::strstr(json.c_str(), FW_VERSION));
     TEST_ASSERT_NOT_NULL(std::strstr(json.c_str(), HW_MODEL));
+}
+
+void test_is_paired_independent_of_connected(void) {
+    mock.simulateConnectUnpaired();
+    TEST_ASSERT_TRUE(mock.isConnected());
+    TEST_ASSERT_FALSE(mock.isPaired());
+    mock.paired = true;
+    TEST_ASSERT_TRUE(mock.isPaired());
+    mock.connected = false;
+    TEST_ASSERT_FALSE(mock.isConnected());
+    TEST_ASSERT_TRUE(mock.isPaired());
 }
 
 int main(int argc, char** argv) {
@@ -227,5 +242,6 @@ int main(int argc, char** argv) {
     RUN_TEST(test_on_uwb_config_received_fires_on_write);
     RUN_TEST(test_on_connect_and_disconnect_callbacks);
     RUN_TEST(test_device_info_json_contains_fw_and_hw);
+    RUN_TEST(test_is_paired_independent_of_connected);
     return UNITY_END();
 }
