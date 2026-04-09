@@ -38,6 +38,7 @@ struct StellaTrackApp: App {
         switch phase {
         case .active:
             notificationService.disableBackgroundDisconnectMonitoring()
+            deviceManager.resumeAllStellaProviders()
         case .background:
             deviceManager.saveNow()
             let hasAlertEnabled = deviceManager.devices.contains { $0.alertEngine.settings.alertEnabled }

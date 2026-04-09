@@ -71,6 +71,7 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
     // MARK: - UWB
 
     private var niSession: NISession?
+    private var lastAccessoryConfigData: Data?
     private var lastRangingPublishDate: Date = .distantPast
     private let rangingInterval: TimeInterval = 1.0
 
@@ -78,8 +79,9 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
 
     private var wantsConnection = false
     private var reconnectAttempt = 0
-    private var reconnectTimer: Timer?
-    private var batteryTimer: Timer?
+    private var reconnectTimer: DispatchSourceTimer?
+    private var batteryTimer: DispatchSourceTimer?
+    private let bgQueue = DispatchQueue(label: "com.separationawareness.provider.timers")
 
     // MARK: - Init
 
@@ -108,9 +110,10 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
         wantsConnection = false
         niSession?.invalidate()
         niSession = nil
-        batteryTimer?.invalidate()
+        lastAccessoryConfigData = nil
+        batteryTimer?.cancel()
         batteryTimer = nil
-        reconnectTimer?.invalidate()
+        reconnectTimer?.cancel()
         reconnectTimer = nil
         reconnectAttempt = 0
         centralManager.cancelPeripheralConnection(identifier: peripheralIdentifier)
@@ -136,7 +139,7 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
     func handleDidConnect() {
         bleLog.log("handleDidConnect — id=\(peripheralIdentifier), type=\(String(describing: type(of: peripheral)))", level: .success)
         reconnectAttempt = 0
-        reconnectTimer?.invalidate()
+        reconnectTimer?.cancel()
         reconnectTimer = nil
         discoveredServiceCount = 0
         expectedServiceCount = 0
@@ -157,9 +160,9 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
     func handleDidDisconnect(error: Error?) {
         niSession?.invalidate()
         niSession = nil
-        batteryTimer?.invalidate()
+        batteryTimer?.cancel()
         batteryTimer = nil
-        reconnectTimer?.invalidate()
+        reconnectTimer?.cancel()
         reconnectTimer = nil
 
         if wantsConnection {
@@ -269,6 +272,8 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
         bleLog.log("[NI] Config hex: \(data.hexString)")
         bleLog.log("[NI] Peripheral identifier for NI: \(peripheralIdentifier)")
 
+        lastAccessoryConfigData = data
+
         let caps = NISession.deviceCapabilities
         bleLog.log("[NI] Device supportsPreciseDistanceMeasurement: \(caps.supportsPreciseDistanceMeasurement)")
 
@@ -323,23 +328,51 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
     }
 
     private func scheduleReconnect() {
-        let delays: [TimeInterval] = [2, 4, 8]
+        reconnectTimer?.cancel()
+        let delays: [TimeInterval] = [2, 4, 8, 15, 30, 60]
         let delay = delays[min(reconnectAttempt, delays.count - 1)]
         reconnectAttempt += 1
-        reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+        let timer = DispatchSource.makeTimerSource(queue: bgQueue)
+        timer.schedule(deadline: .now() + delay)
+        timer.setEventHandler { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, self.wantsConnection else { return }
                 self.centralManager.connectPeripheral(identifier: self.peripheralIdentifier, options: nil)
             }
         }
+        reconnectTimer = timer
+        timer.resume()
     }
 
     private func startBatteryPolling() {
-        batteryTimer?.invalidate()
-        batteryTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        batteryTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: bgQueue)
+        timer.schedule(deadline: .now() + 30, repeating: 30)
+        timer.setEventHandler { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, let batteryCharID = self.batteryCharID else { return }
                 self.peripheral.readValue(for: batteryCharID)
+            }
+        }
+        batteryTimer = timer
+        timer.resume()
+    }
+
+    func resumeAfterBackground() {
+        guard wantsConnection else { return }
+        bleLog.log("resumeAfterBackground — status=\(String(describing: currentConnectionStatus))")
+
+        switch currentConnectionStatus {
+        case .disconnected, .searching:
+            bleLog.log("BLE not connected — triggering reconnect", level: .warning)
+            centralManager.connectPeripheral(identifier: peripheralIdentifier, options: nil)
+        case .connected, .ranging:
+            if niSession == nil, let configData = lastAccessoryConfigData {
+                bleLog.log("NISession gone — restarting with cached config", level: .warning)
+                startNISession(with: configData)
+            } else if niSession == nil {
+                bleLog.log("NISession gone, no cached config — sending fresh init", level: .warning)
+                sendFreshInitCommand()
             }
         }
     }
@@ -573,7 +606,13 @@ extension StellaDistanceProvider: NISessionDelegate {
 
     nonisolated func sessionSuspensionEnded(_ session: NISession) {
         Task { @MainActor in
-            bleLog.log("[NI] session suspension ended", level: .success)
+            bleLog.log("[NI] session suspension ended — attempting to re-run", level: .success)
+            guard let configData = lastAccessoryConfigData else {
+                bleLog.log("[NI] no cached config to re-run, requesting fresh init", level: .warning)
+                sendFreshInitCommand()
+                return
+            }
+            startNISession(with: configData)
         }
     }
 }

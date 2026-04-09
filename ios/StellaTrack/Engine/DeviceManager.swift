@@ -74,6 +74,7 @@ class DeviceManager: NSObject, ObservableObject {
     func removeDevice(id: UUID) {
         if let index = devices.firstIndex(where: { $0.id == id }) {
             devices[index].provider.stop()
+            DistanceHistory.deleteFile(for: id)
             devices.remove(at: index)
             scheduleSave()
         }
@@ -161,6 +162,9 @@ class DeviceManager: NSObject, ObservableObject {
             )
         }
         persistenceService.save(records)
+        for device in devices {
+            device.distanceHistory.save(for: device.id)
+        }
     }
 
     private func observeDevice(_ device: TrackedDevice) {
@@ -213,13 +217,51 @@ class DeviceManager: NSObject, ObservableObject {
             .compactMap { $0.provider as? StellaDistanceProvider }
             .first { $0.peripheralIdentifier == peripheralIdentifier }
     }
+
+    func reconnectSearchingProviders() {
+        guard let cbCentral = centralManager as? CBCentralManager,
+              cbCentral.state == .poweredOn else { return }
+
+        var needsScan = false
+        for device in devices {
+            guard let provider = device.provider as? StellaDistanceProvider,
+                  provider.currentConnectionStatus == .searching else { continue }
+
+            let known = cbCentral.retrievePeripherals(withIdentifiers: [provider.peripheralIdentifier])
+            if let peripheral = known.first {
+                BLEDebugLog.shared.log("Reconnect: found \(peripheral.identifier) via retrievePeripherals — connecting")
+                let wrapper = CBPeripheralWrapper(peripheral)
+                provider.replacePeripheral(wrapper)
+                cbCentral.connect(peripheral, options: nil)
+            } else {
+                needsScan = true
+            }
+        }
+
+        if needsScan {
+            BLEDebugLog.shared.log("Reconnect: some providers not found via retrieve — starting scan")
+            cbCentral.scanForPeripherals(
+                withServices: StellaConstants.scanServiceUUIDs,
+                options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+            )
+        }
+    }
+
+    func resumeAllStellaProviders() {
+        for device in devices {
+            (device.provider as? StellaDistanceProvider)?.resumeAfterBackground()
+        }
+    }
 }
 
 // MARK: - CBCentralManagerDelegate (reconnect support)
 
 extension DeviceManager: CBCentralManagerDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        // Required delegate method; no action needed — providers handle connection via connectPeripheral.
+        guard central.state == .poweredOn else { return }
+        Task { @MainActor in
+            self.reconnectSearchingProviders()
+        }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
@@ -242,6 +284,22 @@ extension DeviceManager: CBCentralManagerDelegate {
         Task { @MainActor in
             guard let provider = stellaProvider(for: peripheral.identifier) else { return }
             provider.handleDidDisconnect(error: error)
+        }
+    }
+
+    nonisolated func centralManager(
+        _ central: CBCentralManager,
+        didDiscover peripheral: CBPeripheral,
+        advertisementData: [String: Any],
+        rssi RSSI: NSNumber
+    ) {
+        Task { @MainActor in
+            guard let provider = stellaProvider(for: peripheral.identifier) else { return }
+            BLEDebugLog.shared.log("Reconnect scan found \(peripheral.identifier) — connecting")
+            central.stopScan()
+            let wrapper = CBPeripheralWrapper(peripheral)
+            provider.replacePeripheral(wrapper)
+            central.connect(peripheral, options: nil)
         }
     }
 }

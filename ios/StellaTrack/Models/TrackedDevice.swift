@@ -71,6 +71,7 @@ class TrackedDevice: ObservableObject, Identifiable {
         self.isMock = isMock
         self.alertEngine = AlertEngine(provider: provider, settings: settings)
         self.distanceHistory = DistanceHistory()
+        self.distanceHistory.loadFromDisk(for: id)
 
         provider.distancePublisher
             .filter(\.isValid)
