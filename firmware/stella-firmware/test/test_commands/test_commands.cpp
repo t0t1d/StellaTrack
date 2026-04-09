@@ -53,13 +53,18 @@ void test_play_sound_with_duration_auto_stops(void) {
     TEST_ASSERT_FALSE(gpio.tone_active);
 }
 
-void test_play_sound_indefinite_does_not_auto_stop(void) {
+void test_play_sound_default_duration_3s_when_param_zero(void) {
     gpio.current_millis = 1000;
     cmd.handleCommand(CMD_PLAY_SOUND, 0);
+    TEST_ASSERT_TRUE(gpio.tone_active);
 
-    gpio.current_millis = 100000;
+    gpio.current_millis = 3999;
     cmd.update();
     TEST_ASSERT_TRUE(gpio.tone_active);
+
+    gpio.current_millis = 4001;
+    cmd.update();
+    TEST_ASSERT_FALSE(gpio.tone_active);
 }
 
 // --- LED tests ---
@@ -130,7 +135,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_stop_sound_deactivates_buzzer);
     RUN_TEST(test_play_sound_with_duration_stores_end_time);
     RUN_TEST(test_play_sound_with_duration_auto_stops);
-    RUN_TEST(test_play_sound_indefinite_does_not_auto_stop);
+    RUN_TEST(test_play_sound_default_duration_3s_when_param_zero);
     RUN_TEST(test_led_on_sets_pin_high);
     RUN_TEST(test_led_off_sets_pin_low);
     RUN_TEST(test_led_state_tracking);

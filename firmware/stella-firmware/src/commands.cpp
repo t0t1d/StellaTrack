@@ -21,16 +21,14 @@ void CommandHandler::update() {
 
 bool CommandHandler::handleCommand(uint8_t code, uint8_t param) {
     switch (code) {
-        case CMD_PLAY_SOUND:
+        case CMD_PLAY_SOUND: {
+            uint8_t dur = (param == 0) ? BUZZER_DEFAULT_DURATION_S : param;
             gpio_->toneStart(PIN_BUZZER, BUZZER_FREQ_HZ);
             buzzer_active_ = true;
-            if (param > 0) {
-                buzzer_timed_ = true;
-                buzzer_end_time_ = gpio_->millis() + (unsigned long)param * 1000;
-            } else {
-                buzzer_timed_ = false;
-            }
+            buzzer_timed_ = true;
+            buzzer_end_time_ = gpio_->millis() + (unsigned long)dur * 1000;
             return true;
+        }
 
         case CMD_STOP_SOUND:
             gpio_->toneStop(PIN_BUZZER);
