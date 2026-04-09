@@ -17,12 +17,15 @@ FirmwareController::FirmwareController(IGpioHal* gpio, IBleHal* ble, IUwbHal* uw
       commands_(gpio),
       power_(accel, gpio),
       button_(gpio),
+      bonding_(),
+      led_(gpio, PIN_LED_USER),
       begun_(false),
       advertising_active_(false),
       last_ranging_rate_applied_(0xFF),
       manual_rate_override_(false),
       last_led_toggle_ms_(0),
-      pairing_led_state_(false) {}
+      pairing_led_state_(false),
+      config_error_(false) {}
 
 bool FirmwareController::begin() {
     if (begun_) {
@@ -46,6 +49,7 @@ bool FirmwareController::begin() {
     button_.setOnShortPress(&FirmwareController::onButtonShortThunk, this);
     button_.setOnLongPress(&FirmwareController::onButtonLongThunk, this);
     bonding_.begin();
+    led_.begin();
 
     begun_ = true;
     ble_service_.startAdvertising();
@@ -64,6 +68,7 @@ void FirmwareController::update() {
     maybeReportBattery();
     tryRestartAdvertising();
     updatePairingLed();
+    led_.update();
 }
 
 bool FirmwareController::isPairingMode() const {
@@ -74,15 +79,29 @@ uint8_t FirmwareController::getBondCount() const {
     return bonding_.getBondCount();
 }
 
+void FirmwareController::setPendingPairAddress(const uint8_t addr[6]) {
+    bonding_.setPendingPairAddress(addr);
+}
+
+bool FirmwareController::hasConfigError() const {
+    return config_error_;
+}
+
 void FirmwareController::onBleConnected() {
     ble_service_.stopAdvertising();
     advertising_active_ = false;
     power_.notifyConnected();
+    led_.triggerAckBlink();
 
+    config_error_ = false;
     uint8_t buf[UWB_CONFIG_MAX_SIZE];
     size_t out_len = 0;
     if (uwb_session_.generateConfig(buf, sizeof(buf), &out_len)) {
         ble_service_.writeUwbConfig(buf, out_len);
+    } else {
+        config_error_ = true;
+        uint8_t err = 0;
+        ble_service_.writeUwbConfig(&err, 1);
     }
 }
 
@@ -109,6 +128,18 @@ void FirmwareController::onCommandWritten(const uint8_t* data, size_t len) {
     const uint8_t param = (len >= 2) ? data[1] : 0;
     uint8_t code = data[0];
 
+    if (code == CMD_PING) {
+        int pct = power_.readBatteryPercent();
+        if (pct < 0) {
+            pct = 0;
+        }
+        if (pct > 100) {
+            pct = 100;
+        }
+        ble_service_.writeBatteryLevel(static_cast<uint8_t>(pct));
+        return;
+    }
+
     if (code == CMD_SET_RANGING_RATE && uwb_session_.isActive()) {
         uint8_t rate = param;
         if (rate < 1) rate = 1;
@@ -122,11 +153,21 @@ void FirmwareController::onCommandWritten(const uint8_t* data, size_t len) {
 }
 
 void FirmwareController::onButtonShortPress() {
+    if (bonding_.isPairingMode()) {
+        bonding_.confirmPairing();
+        if (!bonding_.isPairingMode()) {
+            led_.setPairingMode(false);
+            pairing_led_state_ = false;
+            gpio_->digitalWrite(PIN_LED_USER, 0);
+        }
+        return;
+    }
     commands_.handleCommand(CMD_PLAY_SOUND, 0);
 }
 
 void FirmwareController::onButtonLongPress() {
     bonding_.enterPairingMode();
+    led_.setPairingMode(true);
     last_led_toggle_ms_ = gpio_->millis();
     pairing_led_state_ = true;
     gpio_->digitalWrite(PIN_LED_USER, 1);

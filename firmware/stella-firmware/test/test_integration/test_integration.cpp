@@ -139,9 +139,17 @@ void test_battery_level_reported_periodically(void) {
     TEST_ASSERT_TRUE(s_fw->begin());
     s_ble.simulateConnect();
 
-    s_gpio.analog_values[BATTERY_ADC_PIN] = 512;
-    const int expected_pct =
-        static_cast<int>(static_cast<float>(512) / 1023.0f * 100.0f + 0.5f);
+    s_gpio.analog_values[BATTERY_ADC_PIN] = 3102;
+    const float voltage = (3102.0f / static_cast<float>(BATTERY_ADC_MAX)) * BATTERY_VREF;
+    float pct =
+        (voltage - BATTERY_VOLTAGE_MIN) / (BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN) * 100.0f;
+    if (pct < 0.0f) {
+        pct = 0.0f;
+    }
+    if (pct > 100.0f) {
+        pct = 100.0f;
+    }
+    const int expected_pct = static_cast<int>(pct + 0.5f);
 
     s_gpio.advanceMillis(BATTERY_REPORT_INTERVAL_MS);
     s_fw->update();
@@ -271,6 +279,89 @@ void test_set_ranging_rate_via_ble_command(void) {
     TEST_ASSERT_EQUAL_UINT8(5, s_uwb.ranging_rate);
 }
 
+void test_short_press_during_pairing_confirms_pairing(void) {
+    s_gpio.pin_values[PIN_BUTTON_USER] = 1;
+    TEST_ASSERT_TRUE(s_fw->begin());
+
+    s_gpio.pin_values[PIN_BUTTON_USER] = 0;
+    s_gpio.advanceMillis(50);
+    s_fw->update();
+    s_gpio.advanceMillis(2000);
+    s_fw->update();
+    TEST_ASSERT_TRUE(s_fw->isPairingMode());
+
+    const uint8_t addr[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+    s_fw->setPendingPairAddress(addr);
+
+    s_gpio.pin_values[PIN_BUTTON_USER] = 1;
+    s_gpio.advanceMillis(50);
+    s_fw->update();
+
+    s_gpio.pin_values[PIN_BUTTON_USER] = 0;
+    s_gpio.advanceMillis(50);
+    s_fw->update();
+    s_gpio.pin_values[PIN_BUTTON_USER] = 1;
+    s_gpio.advanceMillis(50);
+    s_fw->update();
+
+    TEST_ASSERT_FALSE(s_fw->isPairingMode());
+    TEST_ASSERT_EQUAL_UINT8(1, s_fw->getBondCount());
+    TEST_ASSERT_FALSE(s_gpio.tone_active);
+}
+
+void test_short_press_outside_pairing_still_plays_sound(void) {
+    s_gpio.pin_values[PIN_BUTTON_USER] = 1;
+    TEST_ASSERT_TRUE(s_fw->begin());
+
+    s_gpio.pin_values[PIN_BUTTON_USER] = 0;
+    s_gpio.advanceMillis(50);
+    s_fw->update();
+    s_gpio.pin_values[PIN_BUTTON_USER] = 1;
+    s_gpio.advanceMillis(50);
+    s_fw->update();
+
+    TEST_ASSERT_TRUE(s_gpio.tone_active);
+}
+
+void test_uwb_config_failure_on_connect_signals_error(void) {
+    s_uwb.fake_accessory_config.clear();
+    s_gpio.pin_values[PIN_BUTTON_USER] = 1;
+    TEST_ASSERT_TRUE(s_fw->begin());
+    s_ble.simulateConnect();
+
+    TEST_ASSERT_TRUE(s_fw->hasConfigError());
+    auto it = s_ble.characteristics.find(CHAR_UWB_CONFIG_OUT_UUID);
+    TEST_ASSERT_TRUE(it != s_ble.characteristics.end());
+    TEST_ASSERT_EQUAL_UINT32(1, it->second.data.size());
+    TEST_ASSERT_EQUAL_UINT8(0, it->second.data[0]);
+}
+
+void test_ping_command_reports_battery(void) {
+    s_gpio.pin_values[PIN_BUTTON_USER] = 1;
+    TEST_ASSERT_TRUE(s_fw->begin());
+    s_ble.simulateConnect();
+
+    s_gpio.analog_values[BATTERY_ADC_PIN] = 1600;
+    const float voltage = (1600.0f / static_cast<float>(BATTERY_ADC_MAX)) * BATTERY_VREF;
+    float pct =
+        (voltage - BATTERY_VOLTAGE_MIN) / (BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN) * 100.0f;
+    if (pct < 0.0f) {
+        pct = 0.0f;
+    }
+    if (pct > 100.0f) {
+        pct = 100.0f;
+    }
+    const int expected_pct = static_cast<int>(pct + 0.5f);
+
+    const uint8_t cmd[] = {CMD_PING, 0};
+    s_ble.simulateWrite(CHAR_COMMAND_UUID, cmd, sizeof(cmd));
+
+    auto it = s_ble.characteristics.find(CHAR_BATTERY_UUID);
+    TEST_ASSERT_TRUE(it != s_ble.characteristics.end());
+    TEST_ASSERT_EQUAL_UINT32(1, it->second.data.size());
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(expected_pct), it->second.data[0]);
+}
+
 int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
@@ -291,5 +382,9 @@ int main(int argc, char** argv) {
     RUN_TEST(test_led_on_off_via_ble_command);
     RUN_TEST(test_uwb_ranging_stops_on_disconnect);
     RUN_TEST(test_set_ranging_rate_via_ble_command);
+    RUN_TEST(test_short_press_during_pairing_confirms_pairing);
+    RUN_TEST(test_short_press_outside_pairing_still_plays_sound);
+    RUN_TEST(test_uwb_config_failure_on_connect_signals_error);
+    RUN_TEST(test_ping_command_reports_battery);
     return UNITY_END();
 }

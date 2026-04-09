@@ -5,6 +5,7 @@
 #include "bonding_manager.h"
 #include "button_handler.h"
 #include "commands.h"
+#include "led_indicator.h"
 #include "power_manager.h"
 #include "uwb_session.h"
 
@@ -22,6 +23,8 @@ public:
 
     bool isPairingMode() const;
     uint8_t getBondCount() const;
+    void setPendingPairAddress(const uint8_t addr[6]);
+    bool hasConfigError() const;
 
 private:
     IGpioHal* gpio_;
@@ -34,6 +37,7 @@ private:
     PowerManager power_;
     ButtonHandler button_;
     BondingManager bonding_;
+    LedIndicator led_;
 
     bool begun_;
     bool advertising_active_;
@@ -41,6 +45,7 @@ private:
     bool manual_rate_override_;
     unsigned long last_led_toggle_ms_;
     bool pairing_led_state_;
+    bool config_error_;
 
     static void onBleConnectThunk(void* ctx);
     static void onBleDisconnectThunk(void* ctx);
