@@ -44,7 +44,7 @@ private struct ThirdDetent: CustomPresentationDetent {
 
 struct MapHomeView: View {
     @EnvironmentObject private var deviceManager: DeviceManager
-    @StateObject private var locationManager = LocationManager()
+    @EnvironmentObject private var locationManager: LocationManager
     @StateObject private var directionCollector = DeviceDirectionsCollector()
 
     @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
@@ -129,8 +129,6 @@ struct MapHomeView: View {
                 device: selectedDevice
             )
         .onAppear {
-            locationManager.requestPermission()
-            locationManager.startUpdating()
             directionCollector.bind(devices: deviceManager.devices)
         }
         .onChange(of: deviceManager.devices.map(\.id)) { _, _ in
@@ -143,10 +141,6 @@ struct MapHomeView: View {
                     showUWBDiagnostics = true
                 }
             }
-        }
-        .onReceive(locationManager.$userLocation) { loc in
-            guard let loc else { return }
-            deviceManager.refreshMockDistances(userLocation: loc)
         }
         .onReceive(
             deviceManager.devices

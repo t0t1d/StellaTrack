@@ -10,6 +10,7 @@ class LocationManager: NSObject, ObservableObject {
 
     private let manager = CLLocationManager()
     private(set) var isBackgroundEnabled = false
+    private var isUpdating = false
 
     override init() {
         super.init()
@@ -32,6 +33,12 @@ class LocationManager: NSObject, ObservableObject {
         guard status == .authorizedWhenInUse || status == .authorizedAlways else { return }
         manager.startUpdatingLocation()
         manager.startUpdatingHeading()
+        isUpdating = true
+        if isBackgroundEnabled {
+            manager.allowsBackgroundLocationUpdates = true
+            manager.pausesLocationUpdatesAutomatically = false
+            manager.showsBackgroundLocationIndicator = true
+        }
         if let h = manager.heading, h.trueHeading >= 0 {
             heading = h.trueHeading
         }
@@ -40,10 +47,12 @@ class LocationManager: NSObject, ObservableObject {
     func stopUpdating() {
         manager.stopUpdatingLocation()
         manager.stopUpdatingHeading()
+        isUpdating = false
     }
 
     func enableBackgroundUpdates() {
         isBackgroundEnabled = true
+        guard isUpdating else { return }
         manager.allowsBackgroundLocationUpdates = true
         manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = true
@@ -51,6 +60,7 @@ class LocationManager: NSObject, ObservableObject {
 
     func disableBackgroundUpdates() {
         isBackgroundEnabled = false
+        guard isUpdating else { return }
         manager.allowsBackgroundLocationUpdates = false
         manager.pausesLocationUpdatesAutomatically = true
         manager.showsBackgroundLocationIndicator = false

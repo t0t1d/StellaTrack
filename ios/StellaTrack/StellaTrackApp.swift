@@ -4,6 +4,7 @@ import CoreBluetooth
 @main
 struct StellaTrackApp: App {
     @StateObject private var deviceManager: DeviceManager
+    @StateObject private var locationManager = LocationManager()
     @StateObject private var notificationService = NotificationService()
 
     init() {
@@ -21,9 +22,11 @@ struct StellaTrackApp: App {
         WindowGroup {
             MapHomeView()
                 .environmentObject(deviceManager)
+                .environmentObject(locationManager)
                 .onAppear {
                     notificationService.requestPermission()
                     notificationService.observeAlerts(from: deviceManager.devices)
+                    deviceManager.bindLocationManager(locationManager)
                 }
                 .onChange(of: deviceManager.devices.map(\.id)) { _, _ in
                     notificationService.observeAlerts(from: deviceManager.devices)
@@ -39,11 +42,17 @@ struct StellaTrackApp: App {
         case .active:
             notificationService.disableBackgroundDisconnectMonitoring()
             deviceManager.resumeAllStellaProviders()
+            locationManager.disableBackgroundUpdates()
         case .background:
             deviceManager.saveNow()
             let hasAlertEnabled = deviceManager.devices.contains { $0.alertEngine.settings.alertEnabled }
             if hasAlertEnabled {
                 notificationService.enableBackgroundDisconnectMonitoring(for: deviceManager.devices)
+            }
+            let hasMockAlerts = deviceManager.devices.contains { $0.isMock && $0.alertEngine.settings.alertEnabled }
+            if hasMockAlerts {
+                locationManager.requestAlwaysPermission()
+                locationManager.enableBackgroundUpdates()
             }
         case .inactive:
             break

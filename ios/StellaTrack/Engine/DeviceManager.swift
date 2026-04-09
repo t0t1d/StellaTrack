@@ -12,6 +12,7 @@ class DeviceManager: NSObject, ObservableObject {
     private(set) var centralManager: CentralManaging?
     private var saveCancellable: AnyCancellable?
     private var deviceObservers = Set<AnyCancellable>()
+    private var locationCancellable: AnyCancellable?
 
     init(centralManager: CentralManaging? = nil) {
         self.centralManager = centralManager
@@ -28,6 +29,18 @@ class DeviceManager: NSObject, ObservableObject {
                   let coord = device.mockCoordinate else { continue }
             Self.sendMockReading(provider: mock, from: userLocation, to: coord)
         }
+    }
+
+    func bindLocationManager(_ locationManager: LocationManager) {
+        guard locationCancellable == nil else { return }
+        locationCancellable = locationManager.$userLocation
+            .compactMap { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] loc in
+                self?.refreshMockDistances(userLocation: loc)
+            }
+        locationManager.requestPermission()
+        locationManager.startUpdating()
     }
 
     func addDevice(name: String, provider: DistanceProvider, settings: AlertSettings = .default, id: UUID = UUID(), icon: String? = nil, isMock: Bool = false) -> TrackedDevice {
@@ -60,6 +73,9 @@ class DeviceManager: NSObject, ObservableObject {
         id: UUID = UUID(),
         icon: String? = nil
     ) -> TrackedDevice {
+        if let central = centralManager {
+            provider.replaceCentralManager(central)
+        }
         return addDevice(name: name, provider: provider, settings: settings, id: id, icon: icon, isMock: false)
     }
 
@@ -88,6 +104,8 @@ class DeviceManager: NSObject, ObservableObject {
         deviceObservers.removeAll()
         saveCancellable?.cancel()
         saveCancellable = nil
+        locationCancellable?.cancel()
+        locationCancellable = nil
 
         if let bundleID = Bundle.main.bundleIdentifier {
             UserDefaults.standard.removePersistentDomain(forName: bundleID)
