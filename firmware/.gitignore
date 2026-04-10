@@ -1,0 +1,15 @@
+# Build artifacts
+.pio/
+
+# IDE
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs (managed separately)
+docs/
+
+# Reference files
+NearbyDemo.txt
