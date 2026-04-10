@@ -20,7 +20,7 @@ ios/Packages/
 ios/Package.resolved
 
 # Firmware
-firmware/stella-firmware/.pio/
-firmware/stella-firmware/.vscode/
+firmware/.pio/
+firmware/.vscode/
 firmware/NearbyDemo.txt
 firmware/stella_hw_test/

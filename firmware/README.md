@@ -81,7 +81,7 @@ The heartbeat prints every 5 seconds:
 ## Project Structure
 
 ```
-stella-firmware/
+firmware/
 ├── include/
 │   ├── config.h              # UUIDs, pins, constants
 │   ├── power_manager.h       # Battery + motion tracking

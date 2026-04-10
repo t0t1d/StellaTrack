@@ -31,7 +31,7 @@ for NI accessories per the Apple/FiRa protocol.
 
 ## Applying
 
-Run from `stella-firmware/`:
+Run from the `firmware/` directory (this repo’s PlatformIO root):
 
 ```
 python patches/apply_patches.py
