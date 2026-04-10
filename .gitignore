@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Cursor / AI
+.cursor/
+
+# Documentation (managed separately)
+docs/
+
+# iOS
+ios/build/
+ios/build_device/
+ios/DerivedData/
+ios/*.xcodeproj/xcuserdata/
+ios/*.xcworkspace/xcuserdata/
+ios/.build/
+ios/Packages/
+ios/Package.resolved
+
+# Firmware
+firmware/stella-firmware/.pio/
+firmware/stella-firmware/.vscode/
+firmware/NearbyDemo.txt
+firmware/stella_hw_test/
