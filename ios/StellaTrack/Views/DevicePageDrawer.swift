@@ -61,7 +61,7 @@ struct DevicePageDrawer: View {
                     settingsSection
                 }
             }
-            .padding(.bottom, 8)
+            .padding(.bottom, 0)
         }
         .scrollDisabled(!scrollEnabled)
         .fullScreenCover(isPresented: $showEditSheet) {
@@ -157,7 +157,7 @@ struct DevicePageDrawer: View {
 
     private var alertCard: some View {
         let enabled = alertEngine.settings.alertEnabled
-        return VStack(spacing: 8) {
+        return VStack(spacing: 4) {
             RoundedRectangle(cornerRadius: 14)
                 .fill(enabled ? Color.orange.opacity(0.15) : Color(.systemGray5))
                 .frame(height: 56)
@@ -236,7 +236,7 @@ struct DevicePageDrawer: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 5.0, execute: work)
             }
         } label: {
-            VStack(spacing: 8) {
+            VStack(spacing: 4) {
                 RoundedRectangle(cornerRadius: 14)
                     .fill(soundPlaying ? Color.orange.opacity(0.15) : Color(.systemGray5))
                     .frame(height: 56)
@@ -261,7 +261,7 @@ struct DevicePageDrawer: View {
 
     private var trackCard: some View {
         Button(action: onTrack) {
-            VStack(spacing: 8) {
+            VStack(spacing: 4) {
                 RoundedRectangle(cornerRadius: 14)
                     .fill(Color(.systemGray5))
                     .frame(height: 56)

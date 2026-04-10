@@ -14,6 +14,16 @@ struct TrackView: View {
     @State private var mapPosition: MapCameraPosition = .automatic
     @State private var smoothedAngle: Double = 0
     @State private var smoothedHeading: Double = 0
+    @State private var convergenceCoaching: String?
+
+    private var stellaConvergencePublisher: AnyPublisher<String?, Never> {
+        if let stella = device.provider as? StellaDistanceProvider {
+            return stella.convergenceStatusSubject
+                .receive(on: DispatchQueue.main)
+                .eraseToAnyPublisher()
+        }
+        return Just(nil).eraseToAnyPublisher()
+    }
 
     private var alertColor: Color {
         guard device.alertEngine.settings.alertEnabled else { return .gray }
@@ -90,9 +100,15 @@ struct TrackView: View {
             syncMapPosition()
             updateMockDirection()
             updateSmoothedAngle()
+            if let stella = device.provider as? StellaDistanceProvider {
+                stella.enableCameraAssistance()
+            }
         }
         .onDisappear {
             motionManager.stopMonitoring()
+            if let stella = device.provider as? StellaDistanceProvider {
+                stella.disableCameraAssistance()
+            }
         }
         .onReceive(device.provider.distancePublisher.receive(on: DispatchQueue.main)) { reading in
             if device.mockCoordinate != nil {
@@ -109,6 +125,9 @@ struct TrackView: View {
         .onChange(of: locationManager.userLocation != nil) { _, _ in
             updateMockDirection()
             updateSmoothedAngle()
+        }
+        .onReceive(stellaConvergencePublisher) { coaching in
+            convergenceCoaching = coaching
         }
     }
 
@@ -157,12 +176,13 @@ struct TrackView: View {
                     .animation(.easeInOut(duration: 0.3), value: smoothedAngle)
             } else {
                 VStack(spacing: 12) {
-                    Image(systemName: "circle.dotted.circle")
+                    Image(systemName: convergenceCoaching != nil ? "viewfinder" : "circle.dotted.circle")
                         .font(.system(size: 56, weight: .regular))
                         .foregroundStyle(.white.opacity(0.85))
-                    Text("Direction not available")
+                    Text(convergenceCoaching ?? "Direction not available")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.white.opacity(0.75))
+                        .multilineTextAlignment(.center)
                 }
             }
 

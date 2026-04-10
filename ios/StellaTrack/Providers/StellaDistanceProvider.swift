@@ -35,6 +35,7 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
     private let distanceSubject = PassthroughSubject<DistanceReading, Never>()
     private let connectionStatusSubject = CurrentValueSubject<ConnectionStatus, Never>(.disconnected)
     private let batteryLevelSubject = CurrentValueSubject<Double?, Never>(nil)
+    let convergenceStatusSubject = CurrentValueSubject<String?, Never>(nil)
 
     var distancePublisher: AnyPublisher<DistanceReading, Never> {
         distanceSubject.eraseToAnyPublisher()
@@ -75,6 +76,10 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
     private var lastRangingPublishDate: Date = .distantPast
     private let rangingInterval: TimeInterval = 1.0
 
+    // MARK: - ARKit Camera Assistance
+
+    private var cameraAssistanceEnabled = false
+
     // MARK: - State
 
     private var wantsConnection = false
@@ -111,6 +116,8 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
         niSession?.invalidate()
         niSession = nil
         lastAccessoryConfigData = nil
+        cameraAssistanceEnabled = false
+        convergenceStatusSubject.send(nil)
         batteryTimer?.cancel()
         batteryTimer = nil
         reconnectTimer?.cancel()
@@ -126,6 +133,53 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
 
     func stopSound() {
         writeCommand(.stopSound)
+    }
+
+    // MARK: - Camera Assistance (ARKit direction)
+
+    func enableCameraAssistance() {
+        guard !cameraAssistanceEnabled else { return }
+        cameraAssistanceEnabled = true
+        convergenceStatusSubject.send("Initializing...")
+
+        guard NISession.deviceCapabilities.supportsPreciseDistanceMeasurement else {
+            bleLog.log("[ARKit] Device does not support precise distance — skipping camera assistance")
+            convergenceStatusSubject.send(nil)
+            return
+        }
+
+        bleLog.log("[ARKit] Camera assistance enabled — will take effect on next NI session run")
+
+        if let niSession, let configData = lastAccessoryConfigData {
+            bleLog.log("[ARKit] Re-running NISession with cameraAssistanceEnabled=true")
+            do {
+                let niConfig = try NINearbyAccessoryConfiguration(data: configData)
+                niConfig.isCameraAssistanceEnabled = true
+                niSession.run(niConfig)
+                bleLog.log("[ARKit] NISession re-run with camera assistance", level: .success)
+            } catch {
+                bleLog.log("[ARKit] Failed to re-run NISession: \(error)", level: .error)
+            }
+        }
+    }
+
+    func disableCameraAssistance() {
+        guard cameraAssistanceEnabled else { return }
+        cameraAssistanceEnabled = false
+        convergenceStatusSubject.send(nil)
+
+        bleLog.log("[ARKit] Camera assistance disabled")
+
+        if let niSession, let configData = lastAccessoryConfigData {
+            do {
+                let niConfig = try NINearbyAccessoryConfiguration(data: configData)
+                niConfig.isCameraAssistanceEnabled = false
+                niSession.run(niConfig)
+                bleLog.log("[ARKit] Re-ran NISession with cameraAssistanceEnabled=false")
+            } catch {
+                bleLog.log("[ARKit] Failed to re-run NISession: \(error)", level: .error)
+            }
+        }
     }
 
     // MARK: - Peripheral Swap (for reconnect after app restart)
@@ -294,11 +348,13 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
         do {
             bleLog.log("[NI] Creating NINearbyAccessoryConfiguration(data:) — \(data.count) bytes...")
             let config = try NINearbyAccessoryConfiguration(data: data)
-            bleLog.log("[NI] Config created successfully", level: .success)
+            config.isCameraAssistanceEnabled = cameraAssistanceEnabled
+            bleLog.log("[NI] Config created (cameraAssistance=\(cameraAssistanceEnabled))", level: .success)
 
             let session = NISession()
             session.delegate = self
             niSession = session
+
             bleLog.log("[NI] NISession created, calling run()...")
             session.run(config)
             bleLog.log("[NI] NISession.run() called — waiting for didGenerateShareableConfigurationData", level: .success)
@@ -378,6 +434,7 @@ class StellaDistanceProvider: NSObject, DistanceProvider {
                 bleLog.log("Re-running existing NISession after foreground resume", level: .warning)
                 do {
                     let config = try NINearbyAccessoryConfiguration(data: configData)
+                    config.isCameraAssistanceEnabled = cameraAssistanceEnabled
                     session.run(config)
                 } catch {
                     bleLog.log("Failed to re-run NISession: \(error), requesting fresh init", level: .error)
@@ -593,13 +650,19 @@ extension StellaDistanceProvider: NISessionDelegate {
             for (i, obj) in nearbyObjects.enumerated() {
                 let dist = obj.distance.map { String(format: "%.3f m", $0) } ?? "nil"
                 let dir = obj.direction.map { "(\($0.x), \($0.y), \($0.z))" } ?? "nil"
-                bleLog.log("[NI] didUpdate object[\(i)] — distance=\(dist), direction=\(dir)")
+                let hAngle = obj.horizontalAngle.map { String(format: "%.3f rad", $0) } ?? "nil"
+                bleLog.log("[NI] didUpdate object[\(i)] — distance=\(dist), direction=\(dir), hAngle=\(hAngle)")
             }
             guard let obj = nearbyObjects.first, let distance = obj.distance else {
                 bleLog.log("[NI] didUpdate — no valid distance in \(nearbyObjects.count) objects", level: .warning)
                 return
             }
-            handleRangingUpdate(distance: distance, direction: obj.direction)
+
+            var resolvedDirection = obj.direction
+            if resolvedDirection == nil, let hAngle = obj.horizontalAngle {
+                resolvedDirection = simd_float3(sin(hAngle), 0, cos(hAngle))
+            }
+            handleRangingUpdate(distance: distance, direction: resolvedDirection)
         }
     }
 
@@ -642,12 +705,51 @@ extension StellaDistanceProvider: NISessionDelegate {
             }
             do {
                 let config = try NINearbyAccessoryConfiguration(data: configData)
+                config.isCameraAssistanceEnabled = cameraAssistanceEnabled
                 session.run(config)
-                bleLog.log("[NI] re-ran existing session after suspension", level: .success)
+                bleLog.log("[NI] re-ran existing session after suspension (cameraAssistance=\(cameraAssistanceEnabled))", level: .success)
             } catch {
                 bleLog.log("[NI] failed to re-run session: \(error), requesting fresh init", level: .error)
                 sendFreshInitCommand()
             }
+        }
+    }
+
+    nonisolated func session(_ session: NISession, didUpdateAlgorithmConvergence convergence: NIAlgorithmConvergence, for object: NINearbyObject?) {
+        Task { @MainActor in
+            let status = convergence.status
+            switch status {
+            case .converged:
+                bleLog.log("[NI] Algorithm CONVERGED — direction should be available", level: .success)
+                convergenceStatusSubject.send(nil)
+            case .notConverged(let reasons):
+                let reasonStrs = reasons.map { describeConvergenceReason($0) }
+                let coaching = reasonStrs.joined(separator: ", ")
+                bleLog.log("[NI] Algorithm NOT converged — reasons: \(coaching)", level: .warning)
+                convergenceStatusSubject.send(coaching)
+            case .unknown:
+                bleLog.log("[NI] Algorithm convergence unknown", level: .warning)
+                convergenceStatusSubject.send("Scanning environment...")
+            @unknown default:
+                bleLog.log("[NI] Algorithm convergence unhandled status", level: .warning)
+                convergenceStatusSubject.send("Scanning environment...")
+            }
+        }
+    }
+
+    private func describeConvergenceReason(_ reason: NIAlgorithmConvergenceStatus.Reason) -> String {
+        if reason == .insufficientMovement {
+            return "Move your iPhone around slowly"
+        } else if reason == .insufficientLighting {
+            return "Move to a brighter area"
+        } else if reason == .insufficientHorizontalSweep {
+            return "Pan your iPhone left and right"
+        } else if reason == .insufficientVerticalSweep {
+            return "Tilt your iPhone up and down"
+        } else if reason == .insufficientSignalStrength {
+            return "Move closer to the device"
+        } else {
+            return "Keep scanning the environment"
         }
     }
 }

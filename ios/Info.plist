@@ -8,5 +8,7 @@
 		<string>nearby-interaction</string>
 		<string>location</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera is used to improve direction accuracy when tracking nearby devices.</string>
 </dict>
 </plist>
