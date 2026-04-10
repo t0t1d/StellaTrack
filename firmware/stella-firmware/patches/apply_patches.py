@@ -15,6 +15,52 @@ PATCHES = [
                 "    //NearbySessionManager::instance().handleStopSession(central);",
                 "    NearbySessionManager::instance().handleStopSession(central);",
             ),
+            (
+                "    case kMsg_ConfigureAndStart:\n"
+                "    {\n"
+                "        nearbySession.sessionState(notStarted);",
+                "    case kMsg_ConfigureAndStart:\n"
+                "    {\n"
+                "        if (nearbySession.sessionState() == Started)\n"
+                "        {\n"
+                "            UWBHAL.Log_I(\"Stopping active session before reconfigure\");\n"
+                "            nearbySession.stop();\n"
+                "            nearbySession.sessionState(notStarted);\n"
+                "        }\n"
+                "        if (nearbySession.sessionState() == notStarted)\n"
+                "        {\n"
+                "            nearbySession.stop();\n"
+                "            nearbySession.deInit();\n"
+                "            nearbySession.sessionState(notCreated);\n"
+                "        }\n"
+                "        nearbySession.sessionState(notStarted);",
+            ),
+            (
+                "                    const uint8_t tmpData[50] = {0};\n"
+                "                    accessoryConfigDataChar.writeValue(tmpData, 50);//neds to be fixed",
+                "                    uint8_t *cachedCfg = nearbySession.config();\n"
+                "                    uint16_t cachedLen = nearbySession.configLen();\n"
+                "                    if (cachedLen > 1) {\n"
+                "                        accessoryConfigDataChar.writeValue(cachedCfg + 1, cachedLen - 1);\n"
+                "                    }",
+            ),
+            (
+                "        if (nearbySession.configIOS() == uwb::Status::SUCCESS)\n"
+                "        {\n"
+                "            uint8_t *BLEmessage_iOS = nearbySession.config();\n"
+                "            uint16_t cfgLen = nearbySession.configLen();",
+                "        bool configOk = false;\n"
+                "        if (nearbySession.sessionState() == Started && nearbySession.configLen() > 1) {\n"
+                "            UWBHAL.Log_I(\"Re-sending cached config (session active)\");\n"
+                "            configOk = true;\n"
+                "        } else {\n"
+                "            configOk = (nearbySession.configIOS() == uwb::Status::SUCCESS);\n"
+                "        }\n"
+                "        if (configOk)\n"
+                "        {\n"
+                "            uint8_t *BLEmessage_iOS = nearbySession.config();\n"
+                "            uint16_t cfgLen = nearbySession.configLen();",
+            ),
         ],
     },
     {
